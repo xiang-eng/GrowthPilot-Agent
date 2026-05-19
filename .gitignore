@@ -1,0 +1,94 @@
+
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+
+# =========================
+# Conda environment files
+# =========================
+.conda/
+
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.local
+.env.*.local
+
+
+# =========================
+# Dependency temporary files
+# =========================
+requirements_freeze.txt
+
+
+# =========================
+# Streamlit secrets
+# =========================
+.streamlit/secrets.toml
+
+
+# =========================
+# Jupyter notebook cache
+# =========================
+.ipynb_checkpoints/
+
+
+# =========================
+# IDE config
+# =========================
+.vscode/
+.idea/
+
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+
+# =========================
+# Project generated outputs
+# =========================
+outputs/*.md
+outputs/*.txt
+outputs/*.json
+outputs/*.csv
+
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+
+# =========================
+# Test / coverage cache
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+
+# =========================
+# Build files
+# =========================
+build/
+dist/
+*.egg-info/

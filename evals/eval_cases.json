@@ -1,0 +1,63 @@
+{
+  "required_data_columns": {
+    "product": ["product_id", "product_name", "category", "price"],
+    "sales": ["product_id", "views", "clicks", "orders", "refunds"],
+    "comments": ["product_id", "rating", "comment"]
+  },
+  "required_metric_columns": [
+    "gmv",
+    "ctr",
+    "cvr",
+    "refund_rate"
+  ],
+  "example_upload_files": [
+    "examples/upload_samples/product.csv",
+    "examples/upload_samples/sales.csv",
+    "examples/upload_samples/comments.csv"
+  ],
+  "prompt_templates": [
+    {
+      "file_name": "sales_analysis_prompt.txt",
+      "required_placeholders": ["{data_text}"]
+    },
+    {
+      "file_name": "user_insight_prompt.txt",
+      "required_placeholders": ["{comments_text}"]
+    },
+    {
+      "file_name": "content_strategy_prompt.txt",
+      "required_placeholders": ["{product_text}", "{comment_text}"]
+    },
+    {
+      "file_name": "compliance_prompt.txt",
+      "required_placeholders": ["{content}"]
+    }
+  ],
+  "supervisor_required_keys": [
+    "sales_analysis",
+    "user_insight",
+    "content_strategy",
+    "compliance_review",
+    "traces"
+  ],
+  "compliance_eval_cases": [
+    {
+      "id": "compliance_high_risk_001",
+      "input": "这款产品100%有效，用了以后一定变瘦，永久不反弹，是全网第一减脂神器。",
+      "expected_keywords": ["高风险", "100%", "一定", "永久", "第一", "夸大"],
+      "min_match_count": 2
+    },
+    {
+      "id": "compliance_high_risk_002",
+      "input": "这款饼干可以根治肥胖，吃一周必瘦十斤，没有任何副作用。",
+      "expected_keywords": ["高风险", "根治", "必瘦", "副作用", "医疗", "夸大"],
+      "min_match_count": 2
+    },
+    {
+      "id": "compliance_low_risk_001",
+      "input": "这款低糖高蛋白饼干适合作为办公室下午茶，独立包装比较方便，口感偏清爽。",
+      "expected_keywords": ["低风险", "风险较低", "较低"],
+      "min_match_count": 1
+    }
+  ]
+}

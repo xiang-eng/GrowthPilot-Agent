@@ -22,7 +22,7 @@ from app.data_service import (
     load_business_data,
     validate_uploaded_data,
 )
-from app.report_service import save_growth_report
+from app.report_service import save_agent_trace, save_growth_report
 
 
 def init_session_state() -> None:
@@ -43,6 +43,12 @@ def init_session_state() -> None:
 
     if "report_path" not in st.session_state:
         st.session_state.report_path = ""
+
+    if "trace_json" not in st.session_state:
+        st.session_state.trace_json = ""
+
+    if "trace_path" not in st.session_state:
+        st.session_state.trace_path = ""
 
 
 def load_page_data():
@@ -145,8 +151,9 @@ def main() -> None:
         6. Supervisor Agent 多 Agent 工作流  
         7. Agent Trace 执行日志面板  
         8. Markdown 增长报告导出与下载  
-        9. CSV 数据上传  
-        10. 上传 CSV 字段校验  
+        9. Agent Trace JSON 导出与下载  
+        10. CSV 数据上传  
+        11. 上传 CSV 字段校验  
         """
     )
 
@@ -322,6 +329,8 @@ def main() -> None:
 
         st.session_state.report_markdown = ""
         st.session_state.report_path = ""
+        st.session_state.trace_json = ""
+        st.session_state.trace_path = ""
 
     if st.session_state.supervisor_result:
         st.success("Supervisor 多 Agent 工作流已完成")
@@ -357,6 +366,38 @@ def main() -> None:
             )
 
             st.caption(f"当前报告路径：{st.session_state.report_path}")
+
+        if st.button("生成并准备下载 Agent Trace JSON", key="prepare_trace_json_button"):
+            try:
+                trace_path = save_agent_trace(
+                    supervisor_result=st.session_state.supervisor_result,
+                    selected_product=selected_product,
+                )
+
+                if not trace_path.exists():
+                    st.error("Trace JSON 生成失败：没有找到 agent_trace.json 文件。")
+                else:
+                    trace_json = trace_path.read_text(encoding="utf-8")
+
+                    st.session_state.trace_path = str(trace_path)
+                    st.session_state.trace_json = trace_json
+
+                    st.success(f"Trace JSON 已生成：{trace_path}")
+
+            except Exception as error:
+                st.error("生成 Agent Trace JSON 时发生错误。")
+                st.exception(error)
+
+        if st.session_state.trace_json:
+            st.download_button(
+                label="下载 Agent Trace JSON",
+                data=st.session_state.trace_json.encode("utf-8"),
+                file_name="agent_trace.json",
+                mime="application/json",
+                key="download_agent_trace_json_button",
+            )
+
+            st.caption(f"当前 Trace 路径：{st.session_state.trace_path}")
 
         traces = st.session_state.supervisor_result.get("traces", [])
 
@@ -394,6 +435,7 @@ def main() -> None:
                         f"{trace['step']}｜{trace['status']}｜{trace['duration_seconds']} 秒"
                     ):
                         st.markdown(f"**步骤说明：** {trace['description']}")
+                        st.markdown(f"**输入摘要：** {trace.get('input_summary', '')}")
                         st.markdown(f"**执行状态：** {trace['status']}")
                         st.markdown(f"**耗时：** {trace['duration_seconds']} 秒")
 

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -7,6 +8,7 @@ from app.config import BASE_DIR
 
 OUTPUT_DIR = BASE_DIR / "outputs"
 REPORT_PATH = OUTPUT_DIR / "growth_report.md"
+TRACE_PATH = OUTPUT_DIR / "agent_trace.json"
 
 
 def build_trace_section(traces: List[Dict[str, Any]]) -> str:
@@ -150,3 +152,34 @@ def save_growth_report(
     REPORT_PATH.write_text(report_content, encoding="utf-8")
 
     return REPORT_PATH
+
+
+def save_agent_trace(
+    supervisor_result: Dict[str, Any],
+    selected_product: str,
+) -> Path:
+    """
+    保存 Supervisor 多 Agent 工作流 Trace 到 outputs/agent_trace.json。
+
+    参数:
+        supervisor_result: Supervisor Agent 返回的完整结果
+        selected_product: 用户选择的商品名称
+
+    返回:
+        保存后的 Trace JSON 文件路径
+    """
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    trace_payload = {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "selected_product": selected_product,
+        "workflow": "Supervisor Agent Workflow",
+        "traces": supervisor_result.get("traces", []),
+    }
+
+    TRACE_PATH.write_text(
+        json.dumps(trace_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return TRACE_PATH

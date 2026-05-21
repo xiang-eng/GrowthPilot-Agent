@@ -11,6 +11,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 
+from app.agents.batch_agent import run_batch_growth_agent
 from app.agents.compliance_agent import run_compliance_agent
 from app.agents.content_agent import run_content_strategy_agent
 from app.agents.insight_agent import run_user_insight_agent
@@ -30,6 +31,9 @@ def init_session_state() -> None:
     """
     if "generated_content" not in st.session_state:
         st.session_state.generated_content = ""
+
+    if "batch_growth_result" not in st.session_state:
+        st.session_state.batch_growth_result = ""
 
     if "supervisor_result" not in st.session_state:
         st.session_state.supervisor_result = None
@@ -135,13 +139,14 @@ def main() -> None:
 
         1. 销售数据分析 Agent  
         2. 用户评论洞察 Agent  
-        3. 内容策略 Agent  
-        4. 合规审核 Agent  
-        5. Supervisor Agent 多 Agent 工作流  
-        6. Agent Trace 执行日志面板  
-        7. Markdown 增长报告导出与下载  
-        8. CSV 数据上传  
-        9. 上传 CSV 字段校验  
+        3. 多商品批量增长分析 Agent  
+        4. 内容策略 Agent  
+        5. 合规审核 Agent  
+        6. Supervisor Agent 多 Agent 工作流  
+        7. Agent Trace 执行日志面板  
+        8. Markdown 增长报告导出与下载  
+        9. CSV 数据上传  
+        10. 上传 CSV 字段校验  
         """
     )
 
@@ -216,7 +221,47 @@ def main() -> None:
         st.markdown(result)
 
     # =========================
-    # 6. 内容策略 Agent
+    # 6. 多商品批量增长分析 Agent
+    # =========================
+
+    st.divider()
+
+    st.subheader("📦 多商品批量增长分析 Agent")
+
+    st.markdown(
+        """
+        这个 Agent 用于同时分析多个商品，输出商品优先级、增长机会、内容方向和运营动作。
+        """
+    )
+
+    default_batch_products = df["product_name"].tolist()[:3]
+
+    batch_selected_products = st.multiselect(
+        "请选择要批量分析的商品",
+        df["product_name"].tolist(),
+        default=default_batch_products,
+        key="batch_selected_products",
+    )
+
+    if st.button("生成多商品批量增长策略", key="batch_growth_agent_button"):
+        if not batch_selected_products:
+            st.warning("请至少选择一个商品。")
+        else:
+            with st.spinner("多商品批量增长分析 Agent 正在分析中..."):
+                result = run_batch_growth_agent(
+                    df=df,
+                    comments=comments,
+                    selected_products=batch_selected_products,
+                )
+
+            st.session_state.batch_growth_result = result
+
+    if st.session_state.batch_growth_result:
+        st.markdown("### 多商品批量增长策略")
+        st.markdown(st.session_state.batch_growth_result)
+
+    # =========================
+    # 7. 内容策略 Agent
     # =========================
 
     st.divider()
@@ -244,7 +289,7 @@ def main() -> None:
         st.markdown(st.session_state.generated_content)
 
     # =========================
-    # 7. Supervisor Agent
+    # 8. Supervisor Agent
     # =========================
 
     st.divider()
@@ -374,7 +419,7 @@ def main() -> None:
             st.markdown(st.session_state.supervisor_result["compliance_review"])
 
     # =========================
-    # 8. 合规审核 Agent
+    # 9. 合规审核 Agent
     # =========================
 
     st.divider()

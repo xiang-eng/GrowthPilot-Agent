@@ -76,6 +76,7 @@ def run_file_evals(eval_cases: Dict[str, Any]) -> List[bool]:
         BASE_DIR / "app" / "agents" / "content_agent.py",
         BASE_DIR / "app" / "agents" / "compliance_agent.py",
         BASE_DIR / "app" / "agents" / "supervisor_agent.py",
+        BASE_DIR / "app" / "agents" / "batch_agent.py",
         BASE_DIR / "app" / "prompt_loader.py",
     ]
 
@@ -295,6 +296,13 @@ def run_prompt_render_evals() -> List[bool]:
         {
             "file_name": "compliance_prompt.txt",
             "kwargs": {"content": "待审核测试内容"},
+        },
+        {
+            "file_name": "batch_growth_prompt.txt",
+            "kwargs": {
+                "product_text": "多商品运营测试数据",
+                "comments_text": "多商品评论测试数据",
+            },
         },
     ]
 

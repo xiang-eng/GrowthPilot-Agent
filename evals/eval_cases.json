@@ -31,6 +31,10 @@
     {
       "file_name": "compliance_prompt.txt",
       "required_placeholders": ["{content}"]
+    },
+    {
+      "file_name": "batch_growth_prompt.txt",
+      "required_placeholders": ["{product_text}", "{comments_text}"]
     }
   ],
   "supervisor_required_keys": [

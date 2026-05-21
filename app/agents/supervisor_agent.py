@@ -1,4 +1,3 @@
-#它负责一键串联所有 Agent：
 import time
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -13,6 +12,7 @@ from app.agents.sales_agent import run_sales_analysis_agent
 def run_agent_with_trace(
     step_name: str,
     step_description: str,
+    input_summary: str,
     agent_func: Callable[..., str],
     *args: Any,
     **kwargs: Any,
@@ -23,6 +23,7 @@ def run_agent_with_trace(
     参数:
         step_name: 当前步骤名称
         step_description: 当前步骤说明
+        input_summary: 当前 Agent 的输入摘要
         agent_func: 要执行的 Agent 函数
         *args: 传给 Agent 函数的位置参数
         **kwargs: 传给 Agent 函数的关键字参数
@@ -40,6 +41,7 @@ def run_agent_with_trace(
         trace = {
             "step": step_name,
             "description": step_description,
+            "input_summary": input_summary,
             "status": "success",
             "duration_seconds": round(duration, 2),
             "output_preview": result[:200],
@@ -54,6 +56,7 @@ def run_agent_with_trace(
         trace = {
             "step": step_name,
             "description": step_description,
+            "input_summary": input_summary,
             "status": "failed",
             "duration_seconds": round(duration, 2),
             "output_preview": "",
@@ -91,6 +94,10 @@ def run_supervisor_workflow(
     sales_analysis, sales_trace = run_agent_with_trace(
         step_name="销售数据分析 Agent",
         step_description="分析商品 GMV、CTR、CVR、退款率等经营指标",
+        input_summary=(
+            f"商品运营数据行数：{len(df)}；"
+            f"字段：{', '.join(df.columns.tolist())}"
+        ),
         agent_func=run_sales_analysis_agent,
         df=df,
     )
@@ -99,6 +106,10 @@ def run_supervisor_workflow(
     user_insight, insight_trace = run_agent_with_trace(
         step_name="用户评论洞察 Agent",
         step_description="从用户评论中提取痛点、正反馈、负反馈和内容机会",
+        input_summary=(
+            f"用户评论数据行数：{len(comments)}；"
+            f"字段：{', '.join(comments.columns.tolist())}"
+        ),
         agent_func=run_user_insight_agent,
         comments=comments,
     )
@@ -107,6 +118,11 @@ def run_supervisor_workflow(
     content_strategy, content_trace = run_agent_with_trace(
         step_name="内容策略 Agent",
         step_description="基于商品数据和评论生成小红书笔记、抖音脚本和发布建议",
+        input_summary=(
+            f"选中商品：{selected_product}；"
+            f"商品运营数据行数：{len(df)}；"
+            f"用户评论数据行数：{len(comments)}"
+        ),
         agent_func=run_content_strategy_agent,
         df=df,
         comments=comments,
@@ -117,6 +133,10 @@ def run_supervisor_workflow(
     compliance_review, compliance_trace = run_agent_with_trace(
         step_name="合规审核 Agent",
         step_description="审核生成内容是否存在夸大宣传、绝对化表达等风险",
+        input_summary=(
+            f"待审核内容长度：{len(content_strategy)} 字符；"
+            f"来源：内容策略 Agent 输出"
+        ),
         agent_func=run_compliance_agent,
         content=content_strategy,
     )

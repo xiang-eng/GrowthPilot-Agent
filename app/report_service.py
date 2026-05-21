@@ -28,6 +28,7 @@ def build_trace_section(traces: List[Dict[str, Any]]) -> str:
         lines.append(f"### {index}. {trace.get('step', '未知步骤')}")
         lines.append("")
         lines.append(f"- 步骤说明：{trace.get('description', '')}")
+        lines.append(f"- 输入摘要：{trace.get('input_summary', '')}")
         lines.append(f"- 执行状态：{trace.get('status', '')}")
         lines.append(f"- 执行耗时：{trace.get('duration_seconds', 0)} 秒")
 

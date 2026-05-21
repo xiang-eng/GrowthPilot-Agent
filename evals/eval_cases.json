@@ -15,6 +15,12 @@
     "examples/upload_samples/sales.csv",
     "examples/upload_samples/comments.csv"
   ],
+  "required_report_service_functions": [
+    "build_trace_section",
+    "build_growth_report",
+    "save_growth_report",
+    "save_agent_trace"
+  ],
   "prompt_templates": [
     {
       "file_name": "sales_analysis_prompt.txt",

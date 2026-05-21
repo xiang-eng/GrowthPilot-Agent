@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -78,6 +79,7 @@ def run_file_evals(eval_cases: Dict[str, Any]) -> List[bool]:
         BASE_DIR / "app" / "agents" / "supervisor_agent.py",
         BASE_DIR / "app" / "agents" / "batch_agent.py",
         BASE_DIR / "app" / "prompt_loader.py",
+        BASE_DIR / "app" / "report_service.py",
     ]
 
     example_upload_files = eval_cases.get("example_upload_files", [])
@@ -328,6 +330,51 @@ def run_prompt_render_evals() -> List[bool]:
     return results
 
 
+def run_report_service_evals(eval_cases: Dict[str, Any]) -> List[bool]:
+    """
+    检查报告导出和 Trace JSON 导出相关函数是否存在。
+    """
+    results = []
+
+    required_functions = eval_cases.get("required_report_service_functions", [])
+
+    try:
+        report_service = importlib.import_module("app.report_service")
+        module_imported = True
+        module_detail = "app.report_service 导入成功"
+    except Exception as error:
+        report_service = None
+        module_imported = False
+        module_detail = str(error)
+
+    print_eval_result(
+        "report_service 模块导入检查",
+        module_imported,
+        module_detail,
+    )
+    results.append(module_imported)
+
+    if not module_imported:
+        return results
+
+    for function_name in required_functions:
+        has_function = hasattr(report_service, function_name)
+        detail = (
+            "函数存在"
+            if has_function
+            else f"缺少函数: {function_name}"
+        )
+
+        print_eval_result(
+            f"report_service 函数检查: {function_name}",
+            has_function,
+            detail,
+        )
+        results.append(has_function)
+
+    return results
+
+
 def run_compliance_llm_evals(eval_cases: Dict[str, Any]) -> List[bool]:
     """
     调用合规审核 Agent，检查是否能识别高风险表达。
@@ -435,14 +482,19 @@ def main() -> None:
     print("==============================")
     results.extend(run_prompt_render_evals())
 
+    print("\n==============================")
+    print("6. 报告与 Trace 导出服务评测")
+    print("==============================")
+    results.extend(run_report_service_evals(eval_cases))
+
     if args.with_llm:
         print("\n==============================")
-        print("6. 合规审核 LLM 评测")
+        print("7. 合规审核 LLM 评测")
         print("==============================")
         results.extend(run_compliance_llm_evals(eval_cases))
     else:
         print("\n==============================")
-        print("6. 合规审核 LLM 评测")
+        print("7. 合规审核 LLM 评测")
         print("==============================")
         print("已跳过。需要运行时请使用：python evals/run_eval.py --with-llm")
 

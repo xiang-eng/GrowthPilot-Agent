@@ -25,6 +25,11 @@ from app.data_service import (
 from app.report_service import save_agent_trace, save_growth_report
 
 
+PRODUCT_TEMPLATE_PATH = BASE_DIR / "examples" / "upload_samples" / "product.csv"
+SALES_TEMPLATE_PATH = BASE_DIR / "examples" / "upload_samples" / "sales.csv"
+COMMENTS_TEMPLATE_PATH = BASE_DIR / "examples" / "upload_samples" / "comments.csv"
+
+
 def init_session_state() -> None:
     """
     初始化 Streamlit 页面状态。
@@ -51,6 +56,38 @@ def init_session_state() -> None:
         st.session_state.trace_path = ""
 
 
+def render_template_download_buttons() -> None:
+    """
+    在侧边栏渲染 CSV 模板下载按钮。
+    """
+    with st.sidebar.expander("下载 CSV 模板", expanded=True):
+        st.caption("可以先下载模板，按照字段格式填写自己的数据后再上传。")
+
+        st.download_button(
+            label="下载 product.csv 模板",
+            data=PRODUCT_TEMPLATE_PATH.read_bytes(),
+            file_name="product.csv",
+            mime="text/csv",
+            key="download_product_template",
+        )
+
+        st.download_button(
+            label="下载 sales.csv 模板",
+            data=SALES_TEMPLATE_PATH.read_bytes(),
+            file_name="sales.csv",
+            mime="text/csv",
+            key="download_sales_template",
+        )
+
+        st.download_button(
+            label="下载 comments.csv 模板",
+            data=COMMENTS_TEMPLATE_PATH.read_bytes(),
+            file_name="comments.csv",
+            mime="text/csv",
+            key="download_comments_template",
+        )
+
+
 def load_page_data():
     """
     根据用户上传情况读取页面数据。
@@ -61,6 +98,8 @@ def load_page_data():
     否则使用项目 data/ 目录下的默认数据。
     """
     st.sidebar.header("数据源配置")
+
+    render_template_download_buttons()
 
     uploaded_product = st.sidebar.file_uploader(
         "上传 product.csv",
@@ -154,6 +193,7 @@ def main() -> None:
         9. Agent Trace JSON 导出与下载  
         10. CSV 数据上传  
         11. 上传 CSV 字段校验  
+        12. CSV 模板下载  
         """
     )
 

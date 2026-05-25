@@ -194,6 +194,8 @@ def main() -> None:
         10. CSV 数据上传  
         11. 上传 CSV 字段校验  
         12. CSV 模板下载  
+        13. 工作流 run_id 追踪  
+        14. Supervisor 工作流进度展示  
         """
     )
 
@@ -357,11 +359,19 @@ def main() -> None:
     )
 
     if st.button("一键运行完整增长工作流", key="supervisor_workflow_button"):
+        progress_bar = st.progress(0)
+        progress_text = st.empty()
+
+        def update_progress(progress: int, message: str) -> None:
+            progress_bar.progress(progress)
+            progress_text.info(message)
+
         with st.spinner("Supervisor Agent 正在调度多个 Agent，请稍等..."):
             supervisor_result = run_supervisor_workflow(
                 df=df,
                 comments=comments,
                 selected_product=selected_product,
+                progress_callback=update_progress,
             )
 
         st.session_state.supervisor_result = supervisor_result
@@ -372,8 +382,16 @@ def main() -> None:
         st.session_state.trace_json = ""
         st.session_state.trace_path = ""
 
+        progress_bar.progress(100)
+        progress_text.success("Supervisor 多 Agent 工作流执行完成。")
+
     if st.session_state.supervisor_result:
+        run_id = st.session_state.supervisor_result.get("run_id", "")
+
         st.success("Supervisor 多 Agent 工作流已完成")
+
+        if run_id:
+            st.info(f"当前工作流运行 ID：{run_id}")
 
         if st.button("生成并准备下载 Markdown 报告", key="prepare_report_button"):
             try:
@@ -474,6 +492,7 @@ def main() -> None:
                     with st.expander(
                         f"{trace['step']}｜{trace['status']}｜{trace['duration_seconds']} 秒"
                     ):
+                        st.markdown(f"**运行 ID：** {trace.get('run_id', '')}")
                         st.markdown(f"**步骤说明：** {trace['description']}")
                         st.markdown(f"**输入摘要：** {trace.get('input_summary', '')}")
                         st.markdown(f"**执行状态：** {trace['status']}")

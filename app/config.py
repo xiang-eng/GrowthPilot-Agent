@@ -2,21 +2,61 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-#以后要改模型名、数据路径，只改这个文件。
+
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-#它用来找到项目根目录：
 
 DATA_DIR = BASE_DIR / "data"
-
 PRODUCT_PATH = DATA_DIR / "product.csv"
 SALES_PATH = DATA_DIR / "sales.csv"
 COMMENTS_PATH = DATA_DIR / "comments.csv"
 
-load_dotenv(BASE_DIR / ".env")
-#去项目根目录找 .env,这样比直接 load_dotenv() 更稳。
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+ENV_PATH = BASE_DIR / ".env"
 
-DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+load_dotenv(ENV_PATH)
 
-QWEN_MODEL = "qwen-plus"
+
+def get_float_env(
+    key: str,
+    default: float,
+) -> float:
+    """
+    从环境变量中读取 float 类型配置。
+
+    如果环境变量不存在，返回默认值。
+    如果环境变量无法转换为 float，也返回默认值。
+
+    参数:
+        key: 环境变量名称
+        default: 默认值
+
+    返回:
+        float 类型配置值
+    """
+    value = os.getenv(key)
+
+    if value is None:
+        return default
+
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "").strip()
+
+DASHSCOPE_BASE_URL = os.getenv(
+    "DASHSCOPE_BASE_URL",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1",
+).strip()
+
+QWEN_MODEL = os.getenv(
+    "QWEN_MODEL",
+    "qwen-plus",
+).strip()
+
+QWEN_TEMPERATURE = get_float_env(
+    "QWEN_TEMPERATURE",
+    0.7,
+)

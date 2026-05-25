@@ -15,11 +15,51 @@
     "examples/upload_samples/sales.csv",
     "examples/upload_samples/comments.csv"
   ],
+  "required_env_example_keys": [
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_BASE_URL",
+    "QWEN_MODEL",
+    "QWEN_TEMPERATURE"
+  ],
+  "required_config_attributes": [
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_BASE_URL",
+    "QWEN_MODEL",
+    "QWEN_TEMPERATURE"
+  ],
+  "required_llm_functions": [
+    "validate_llm_config",
+    "get_qwen_client",
+    "call_qwen"
+  ],
+  "required_supervisor_functions": [
+    "generate_run_id",
+    "notify_progress",
+    "run_agent_with_trace",
+    "run_supervisor_workflow"
+  ],
   "required_report_service_functions": [
     "build_trace_section",
     "build_growth_report",
     "save_growth_report",
     "save_agent_trace"
+  ],
+  "required_trace_json_keys": [
+    "generated_at",
+    "run_id",
+    "selected_product",
+    "workflow",
+    "traces"
+  ],
+  "required_trace_item_keys": [
+    "run_id",
+    "step",
+    "description",
+    "input_summary",
+    "status",
+    "duration_seconds",
+    "output_preview",
+    "error"
   ],
   "prompt_templates": [
     {
@@ -44,6 +84,7 @@
     }
   ],
   "supervisor_required_keys": [
+    "run_id",
     "sales_analysis",
     "user_insight",
     "content_strategy",

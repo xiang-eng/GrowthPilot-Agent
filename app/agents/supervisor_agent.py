@@ -1,5 +1,6 @@
 import time
-from typing import Any, Callable, Dict, List, Tuple
+import uuid
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -9,7 +10,35 @@ from app.agents.insight_agent import run_user_insight_agent
 from app.agents.sales_agent import run_sales_analysis_agent
 
 
+def generate_run_id() -> str:
+    """
+    生成一次 Supervisor 工作流运行的唯一 ID。
+
+    返回:
+        形如 run_xxxxxxxxxxxx 的字符串
+    """
+    return f"run_{uuid.uuid4().hex[:12]}"
+
+
+def notify_progress(
+    progress_callback: Optional[Callable[[int, str], None]],
+    progress: int,
+    message: str,
+) -> None:
+    """
+    通知前端当前工作流执行进度。
+
+    参数:
+        progress_callback: 前端传入的进度更新函数
+        progress: 当前进度，范围 0-100
+        message: 当前执行状态说明
+    """
+    if progress_callback is not None:
+        progress_callback(progress, message)
+
+
 def run_agent_with_trace(
+    run_id: str,
     step_name: str,
     step_description: str,
     input_summary: str,
@@ -21,6 +50,7 @@ def run_agent_with_trace(
     运行单个 Agent，并记录执行日志。
 
     参数:
+        run_id: 当前 Supervisor 工作流运行 ID
         step_name: 当前步骤名称
         step_description: 当前步骤说明
         input_summary: 当前 Agent 的输入摘要
@@ -39,6 +69,7 @@ def run_agent_with_trace(
         duration = time.perf_counter() - start_time
 
         trace = {
+            "run_id": run_id,
             "step": step_name,
             "description": step_description,
             "input_summary": input_summary,
@@ -54,6 +85,7 @@ def run_agent_with_trace(
         duration = time.perf_counter() - start_time
 
         trace = {
+            "run_id": run_id,
             "step": step_name,
             "description": step_description,
             "input_summary": input_summary,
@@ -70,6 +102,7 @@ def run_supervisor_workflow(
     df: pd.DataFrame,
     comments: pd.DataFrame,
     selected_product: str,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
     """
     运行 Supervisor 多 Agent 工作流。
@@ -85,13 +118,28 @@ def run_supervisor_workflow(
         df: 商品运营数据表
         comments: 用户评论数据表
         selected_product: 用户选择的商品名称
+        progress_callback: 可选进度回调函数，用于前端展示执行进度
 
     返回:
-        包含多个 Agent 输出结果和执行日志的字典
+        包含多个 Agent 输出结果、run_id 和执行日志的字典
     """
+    run_id = generate_run_id()
     traces: List[Dict[str, Any]] = []
 
+    notify_progress(
+        progress_callback,
+        5,
+        f"已创建工作流运行 ID：{run_id}",
+    )
+
+    notify_progress(
+        progress_callback,
+        15,
+        "正在运行销售数据分析 Agent...",
+    )
+
     sales_analysis, sales_trace = run_agent_with_trace(
+        run_id=run_id,
         step_name="销售数据分析 Agent",
         step_description="分析商品 GMV、CTR、CVR、退款率等经营指标",
         input_summary=(
@@ -103,7 +151,14 @@ def run_supervisor_workflow(
     )
     traces.append(sales_trace)
 
+    notify_progress(
+        progress_callback,
+        35,
+        "销售数据分析 Agent 已完成，正在运行用户评论洞察 Agent...",
+    )
+
     user_insight, insight_trace = run_agent_with_trace(
+        run_id=run_id,
         step_name="用户评论洞察 Agent",
         step_description="从用户评论中提取痛点、正反馈、负反馈和内容机会",
         input_summary=(
@@ -115,7 +170,14 @@ def run_supervisor_workflow(
     )
     traces.append(insight_trace)
 
+    notify_progress(
+        progress_callback,
+        55,
+        "用户评论洞察 Agent 已完成，正在运行内容策略 Agent...",
+    )
+
     content_strategy, content_trace = run_agent_with_trace(
+        run_id=run_id,
         step_name="内容策略 Agent",
         step_description="基于商品数据和评论生成小红书笔记、抖音脚本和发布建议",
         input_summary=(
@@ -130,7 +192,14 @@ def run_supervisor_workflow(
     )
     traces.append(content_trace)
 
+    notify_progress(
+        progress_callback,
+        75,
+        "内容策略 Agent 已完成，正在运行合规审核 Agent...",
+    )
+
     compliance_review, compliance_trace = run_agent_with_trace(
+        run_id=run_id,
         step_name="合规审核 Agent",
         step_description="审核生成内容是否存在夸大宣传、绝对化表达等风险",
         input_summary=(
@@ -142,7 +211,14 @@ def run_supervisor_workflow(
     )
     traces.append(compliance_trace)
 
+    notify_progress(
+        progress_callback,
+        100,
+        "Supervisor 多 Agent 工作流执行完成。",
+    )
+
     return {
+        "run_id": run_id,
         "sales_analysis": sales_analysis,
         "user_insight": user_insight,
         "content_strategy": content_strategy,

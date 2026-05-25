@@ -29,6 +29,7 @@ def build_trace_section(traces: List[Dict[str, Any]]) -> str:
     for index, trace in enumerate(traces, start=1):
         lines.append(f"### {index}. {trace.get('step', '未知步骤')}")
         lines.append("")
+        lines.append(f"- 运行 ID：{trace.get('run_id', '')}")
         lines.append(f"- 步骤说明：{trace.get('description', '')}")
         lines.append(f"- 输入摘要：{trace.get('input_summary', '')}")
         lines.append(f"- 执行状态：{trace.get('status', '')}")
@@ -70,6 +71,7 @@ def build_growth_report(
     """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    run_id = supervisor_result.get("run_id", "")
     sales_analysis = supervisor_result.get("sales_analysis", "")
     user_insight = supervisor_result.get("user_insight", "")
     content_strategy = supervisor_result.get("content_strategy", "")
@@ -83,6 +85,7 @@ def build_growth_report(
 ## 一、报告信息
 
 - 生成时间：{now}
+- 运行 ID：{run_id}
 - 分析商品：{selected_product}
 - 报告来源：Supervisor 多 Agent 工作流
 
@@ -172,6 +175,7 @@ def save_agent_trace(
 
     trace_payload = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "run_id": supervisor_result.get("run_id", ""),
         "selected_product": selected_product,
         "workflow": "Supervisor Agent Workflow",
         "traces": supervisor_result.get("traces", []),

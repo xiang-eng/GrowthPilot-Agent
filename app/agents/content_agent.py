@@ -1,5 +1,6 @@
 import pandas as pd
 
+from app.knowledge_service import load_content_strategy_knowledge
 from app.llm import call_qwen
 from app.prompt_loader import render_prompt
 
@@ -20,12 +21,21 @@ def build_content_strategy_prompt(
     """
     product_text = product_info.to_string()
     comment_text = product_comments.to_string()
+    knowledge_text = load_content_strategy_knowledge()
 
     prompt = render_prompt(
         "content_strategy_prompt.txt",
         product_text=product_text,
         comment_text=comment_text,
     )
+
+    if knowledge_text:
+        prompt = (
+            f"{prompt}\n\n"
+            "以下是内容平台规则和内容风格知识，请在生成内容策略时参考，"
+            "但不要逐字照抄：\n"
+            f"{knowledge_text}"
+        )
 
     return prompt
 

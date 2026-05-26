@@ -15,6 +15,19 @@
     "examples/upload_samples/sales.csv",
     "examples/upload_samples/comments.csv"
   ],
+  "knowledge_base_files": [
+    "knowledge_base/platform_rules.md",
+    "knowledge_base/content_style_guide.md",
+    "knowledge_base/compliance_terms.md"
+  ],
+  "required_knowledge_service_functions": [
+    "load_platform_rules",
+    "load_content_style_guide",
+    "load_compliance_terms",
+    "load_content_strategy_knowledge",
+    "load_compliance_knowledge",
+    "load_all_knowledge"
+  ],
   "required_env_example_keys": [
     "DASHSCOPE_API_KEY",
     "DASHSCOPE_BASE_URL",

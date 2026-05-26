@@ -131,11 +131,17 @@ def run_file_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]:
         BASE_DIR / "app" / "llm.py",
         BASE_DIR / "app" / "prompt_loader.py",
         BASE_DIR / "app" / "report_service.py",
+        BASE_DIR / "app" / "knowledge_service.py",
     ]
 
     example_upload_files = eval_cases.get("example_upload_files", [])
 
     for relative_path in example_upload_files:
+        required_files.append(BASE_DIR / relative_path)
+
+    knowledge_base_files = eval_cases.get("knowledge_base_files", [])
+
+    for relative_path in knowledge_base_files:
         required_files.append(BASE_DIR / relative_path)
 
     for file_path in required_files:
@@ -270,6 +276,93 @@ def run_env_config_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]:
                 str(error),
             )
             results.append(False)
+
+    return results
+
+
+def run_knowledge_base_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]:
+    """
+    检查轻量知识库文件和 knowledge_service 是否可用。
+    """
+    results: List[Optional[bool]] = []
+
+    knowledge_base_files = eval_cases.get("knowledge_base_files", [])
+    required_functions = eval_cases.get("required_knowledge_service_functions", [])
+
+    for relative_path in knowledge_base_files:
+        file_path = BASE_DIR / relative_path
+        exists = file_path.exists()
+
+        print_eval_result(
+            f"知识库文件存在检查: {relative_path}",
+            exists,
+        )
+        results.append(exists)
+
+    try:
+        knowledge_service = importlib.import_module("app.knowledge_service")
+        module_imported = True
+        module_detail = "app.knowledge_service 导入成功"
+    except Exception as error:
+        knowledge_service = None
+        module_imported = False
+        module_detail = str(error)
+
+    print_eval_result(
+        "knowledge_service 模块导入检查",
+        module_imported,
+        module_detail,
+    )
+    results.append(module_imported)
+
+    if not module_imported:
+        return results
+
+    for function_name in required_functions:
+        has_function = hasattr(knowledge_service, function_name)
+
+        print_eval_result(
+            f"knowledge_service 函数检查: {function_name}",
+            has_function,
+            "函数存在" if has_function else "函数缺失",
+        )
+        results.append(has_function)
+
+    if hasattr(knowledge_service, "load_content_strategy_knowledge"):
+        try:
+            content_knowledge = knowledge_service.load_content_strategy_knowledge()
+            content_knowledge_passed = len(content_knowledge.strip()) > 0
+            content_knowledge_detail = (
+                f"内容策略知识库长度: {len(content_knowledge)}"
+            )
+        except Exception as error:
+            content_knowledge_passed = False
+            content_knowledge_detail = str(error)
+
+        print_eval_result(
+            "内容策略知识库读取检查",
+            content_knowledge_passed,
+            content_knowledge_detail,
+        )
+        results.append(content_knowledge_passed)
+
+    if hasattr(knowledge_service, "load_compliance_knowledge"):
+        try:
+            compliance_knowledge = knowledge_service.load_compliance_knowledge()
+            compliance_knowledge_passed = len(compliance_knowledge.strip()) > 0
+            compliance_knowledge_detail = (
+                f"合规知识库长度: {len(compliance_knowledge)}"
+            )
+        except Exception as error:
+            compliance_knowledge_passed = False
+            compliance_knowledge_detail = str(error)
+
+        print_eval_result(
+            "合规知识库读取检查",
+            compliance_knowledge_passed,
+            compliance_knowledge_detail,
+        )
+        results.append(compliance_knowledge_passed)
 
     return results
 
@@ -924,43 +1017,48 @@ def main() -> None:
     results.extend(run_env_config_evals(eval_cases))
 
     print("\n==============================")
-    print("3. 默认数据读取与指标评测")
+    print("3. 轻量知识库评测")
+    print("==============================")
+    results.extend(run_knowledge_base_evals(eval_cases))
+
+    print("\n==============================")
+    print("4. 默认数据读取与指标评测")
     print("==============================")
     results.extend(run_data_evals(eval_cases))
 
     print("\n==============================")
-    print("4. examples 上传示例数据评测")
+    print("5. examples 上传示例数据评测")
     print("==============================")
     results.extend(run_example_upload_evals(eval_cases))
 
     print("\n==============================")
-    print("5. Prompt 模板文件评测")
+    print("6. Prompt 模板文件评测")
     print("==============================")
     results.extend(run_prompt_template_evals(eval_cases))
 
     print("\n==============================")
-    print("6. Prompt 渲染评测")
+    print("7. Prompt 渲染评测")
     print("==============================")
     results.extend(run_prompt_render_evals())
 
     print("\n==============================")
-    print("7. Supervisor 工作流静态能力评测")
+    print("8. Supervisor 工作流静态能力评测")
     print("==============================")
     results.extend(run_supervisor_static_evals(eval_cases))
 
     print("\n==============================")
-    print("8. 报告与 Trace 导出服务评测")
+    print("9. 报告与 Trace 导出服务评测")
     print("==============================")
     results.extend(run_report_service_evals(eval_cases))
 
     if args.with_llm:
         print("\n==============================")
-        print("9. 合规审核 LLM 评测")
+        print("10. 合规审核 LLM 评测")
         print("==============================")
         results.extend(run_compliance_llm_evals(eval_cases))
     else:
         print("\n==============================")
-        print("9. 合规审核 LLM 评测")
+        print("10. 合规审核 LLM 评测")
         print("==============================")
         print("已跳过。需要运行时请使用：python evals/run_eval.py --with-llm")
 

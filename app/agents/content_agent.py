@@ -3,7 +3,7 @@ import pandas as pd
 from app.knowledge_service import load_content_strategy_knowledge
 from app.llm import call_qwen
 from app.prompt_loader import render_prompt
-from app.rag_service import retrieve_knowledge
+from app.rag_service import retrieve_knowledge_with_details
 
 
 def build_content_strategy_prompt(
@@ -36,23 +36,51 @@ def build_content_strategy_prompt(
         f"用户评论数据：\n{comment_text}"
     )
 
+    rag_metadata = {
+        "query": rag_query,
+        "top_k": 3,
+        "sources": [],
+        "chunk_count": 0,
+        "used_chromadb": False,
+        "fallback_used": False,
+    }
+
     try:
-        knowledge_text = retrieve_knowledge(
+        rag_result = retrieve_knowledge_with_details(
             query=rag_query,
             top_k=3,
         )
+        knowledge_text = rag_result["retrieved_text"]
+        rag_metadata.update(
+            {
+                "query": rag_result["query"],
+                "top_k": rag_result["top_k"],
+                "sources": rag_result["sources"],
+                "chunk_count": rag_result["chunk_count"],
+                "used_chromadb": rag_result["used_chromadb"],
+            }
+        )
     except Exception:
         knowledge_text = load_content_strategy_knowledge()
+        rag_metadata["fallback_used"] = True
 
     if not knowledge_text:
         knowledge_text = load_content_strategy_knowledge()
+        rag_metadata["fallback_used"] = True
 
     if knowledge_text:
         prompt = (
             f"{prompt}\n\n"
             "以下是从 ChromaDB 向量知识库检索到的内容平台规则和内容风格知识，"
             "请在生成内容策略时参考，但不要逐字照抄：\n"
-            f"{knowledge_text}"
+            f"{knowledge_text}\n\n"
+            "RAG 检索元信息：\n"
+            f"- query: {rag_metadata['query'][:300]}\n"
+            f"- top_k: {rag_metadata['top_k']}\n"
+            f"- sources: {rag_metadata['sources']}\n"
+            f"- chunk_count: {rag_metadata['chunk_count']}\n"
+            f"- used_chromadb: {rag_metadata['used_chromadb']}\n"
+            f"- fallback_used: {rag_metadata['fallback_used']}"
         )
 
     return prompt

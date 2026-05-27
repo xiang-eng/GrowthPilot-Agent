@@ -39,7 +39,8 @@
     "build_knowledge_chunks",
     "index_knowledge_base",
     "ensure_knowledge_index",
-    "retrieve_knowledge"
+    "retrieve_knowledge",
+    "retrieve_knowledge_with_details"
   ],
   "rag_eval_queries": [
     {
@@ -54,6 +55,18 @@
       "min_length": 100,
       "expected_keywords": ["来源：", "风险"]
     }
+  ],
+  "required_rag_context_keys": [
+    "enabled",
+    "agent",
+    "query",
+    "top_k",
+    "sources",
+    "chunk_count",
+    "used_chromadb",
+    "fallback_used",
+    "retrieved_text_preview",
+    "error"
   ],
   "required_env_example_keys": [
     "DASHSCOPE_API_KEY",
@@ -75,6 +88,8 @@
   "required_supervisor_functions": [
     "generate_run_id",
     "notify_progress",
+    "build_content_rag_trace_context",
+    "build_compliance_rag_trace_context",
     "run_agent_with_trace",
     "run_supervisor_workflow"
   ],

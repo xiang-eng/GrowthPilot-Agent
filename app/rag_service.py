@@ -1,7 +1,7 @@
 import hashlib
 import math
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import chromadb
 
@@ -234,14 +234,27 @@ def ensure_knowledge_index() -> None:
         index_knowledge_base(reset=True)
 
 
-def retrieve_knowledge(query: str, top_k: int = 3) -> str:
+def retrieve_knowledge_with_details(query: str, top_k: int = 3) -> Dict[str, Any]:
     """
-    根据 query 从 ChromaDB 检索相关知识片段。
+    根据 query 从 ChromaDB 检索相关知识片段，并返回可用于 Trace 的详细信息。
 
-    返回拼接后的文本，方便注入 Prompt。
+    返回字段：
+        retrieved_text: 拼接后的检索文本
+        query: 原始检索问题
+        top_k: 检索数量
+        sources: 命中的知识库来源文件
+        chunk_count: 命中的 chunk 数量
+        used_chromadb: 是否使用 ChromaDB
     """
     if not query.strip():
-        return ""
+        return {
+            "retrieved_text": "",
+            "query": query,
+            "top_k": top_k,
+            "sources": [],
+            "chunk_count": 0,
+            "used_chromadb": False,
+        }
 
     if top_k <= 0:
         raise ValueError("top_k 必须大于 0")
@@ -260,6 +273,7 @@ def retrieve_knowledge(query: str, top_k: int = 3) -> str:
     metadatas = results.get("metadatas", [[]])[0]
 
     retrieved_sections: List[str] = []
+    sources: List[str] = []
 
     for index, document in enumerate(documents):
         source = ""
@@ -268,11 +282,36 @@ def retrieve_knowledge(query: str, top_k: int = 3) -> str:
             source = metadatas[index].get("source", "")
 
         if source:
+            sources.append(source)
             retrieved_sections.append(f"来源：{source}\n{document}")
         else:
             retrieved_sections.append(document)
 
-    return "\n\n---\n\n".join(retrieved_sections)
+    unique_sources = list(dict.fromkeys(sources))
+    retrieved_text = "\n\n---\n\n".join(retrieved_sections)
+
+    return {
+        "retrieved_text": retrieved_text,
+        "query": query,
+        "top_k": top_k,
+        "sources": unique_sources,
+        "chunk_count": len(documents),
+        "used_chromadb": True,
+    }
+
+
+def retrieve_knowledge(query: str, top_k: int = 3) -> str:
+    """
+    根据 query 从 ChromaDB 检索相关知识片段。
+
+    返回拼接后的文本，方便注入 Prompt。
+    """
+    result = retrieve_knowledge_with_details(
+        query=query,
+        top_k=top_k,
+    )
+
+    return result["retrieved_text"]
 
 
 if __name__ == "__main__":
@@ -280,7 +319,14 @@ if __name__ == "__main__":
     print(f"知识库索引构建完成，写入片段数: {total_chunks}")
 
     demo_query = "小红书内容生成需要注意哪些合规表达？"
-    retrieved_text = retrieve_knowledge(demo_query, top_k=3)
+    retrieved_result = retrieve_knowledge_with_details(demo_query, top_k=3)
 
     print("\n检索示例：")
-    print(retrieved_text)
+    print(retrieved_result["retrieved_text"])
+
+    print("\n检索元信息：")
+    print(f"query: {retrieved_result['query']}")
+    print(f"top_k: {retrieved_result['top_k']}")
+    print(f"sources: {retrieved_result['sources']}")
+    print(f"chunk_count: {retrieved_result['chunk_count']}")
+    print(f"used_chromadb: {retrieved_result['used_chromadb']}")

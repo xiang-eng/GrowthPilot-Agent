@@ -8,6 +8,7 @@ from app.agents.compliance_agent import run_compliance_agent
 from app.agents.content_agent import run_content_strategy_agent
 from app.agents.insight_agent import run_user_insight_agent
 from app.agents.sales_agent import run_sales_analysis_agent
+from app.rag_service import retrieve_knowledge_with_details
 
 
 def generate_run_id() -> str:
@@ -37,6 +38,134 @@ def notify_progress(
         progress_callback(progress, message)
 
 
+def build_content_rag_trace_context(
+    df: pd.DataFrame,
+    comments: pd.DataFrame,
+    selected_product: str,
+) -> Dict[str, Any]:
+    """
+    构建内容策略 Agent 的 RAG Trace 元信息。
+    """
+    product_info = df[df["product_name"] == selected_product]
+
+    if product_info.empty:
+        return {
+            "rag_context": {
+                "enabled": True,
+                "agent": "Content Strategy Agent",
+                "query": "",
+                "top_k": 3,
+                "sources": [],
+                "chunk_count": 0,
+                "used_chromadb": False,
+                "fallback_used": True,
+                "retrieved_text_preview": "",
+                "error": f"未找到选中商品：{selected_product}",
+            }
+        }
+
+    product_id = product_info.iloc[0]["product_id"]
+
+    product_comments = comments[
+        comments["product_id"].astype(str) == str(product_id)
+    ]
+
+    product_text = product_info.to_string()
+    comment_text = product_comments.to_string()
+
+    rag_query = (
+        "请根据当前商品运营数据和用户评论，检索适合内容策略生成的"
+        "内容平台规则、小红书内容风格、抖音脚本结构和合规表达建议。\n\n"
+        f"商品运营数据：\n{product_text}\n\n"
+        f"用户评论数据：\n{comment_text}"
+    )
+
+    try:
+        rag_result = retrieve_knowledge_with_details(
+            query=rag_query,
+            top_k=3,
+        )
+
+        return {
+            "rag_context": {
+                "enabled": True,
+                "agent": "Content Strategy Agent",
+                "query": rag_result["query"][:500],
+                "top_k": rag_result["top_k"],
+                "sources": rag_result["sources"],
+                "chunk_count": rag_result["chunk_count"],
+                "used_chromadb": rag_result["used_chromadb"],
+                "fallback_used": False,
+                "retrieved_text_preview": rag_result["retrieved_text"][:300],
+                "error": "",
+            }
+        }
+
+    except Exception as error:
+        return {
+            "rag_context": {
+                "enabled": True,
+                "agent": "Content Strategy Agent",
+                "query": rag_query[:500],
+                "top_k": 3,
+                "sources": [],
+                "chunk_count": 0,
+                "used_chromadb": False,
+                "fallback_used": True,
+                "retrieved_text_preview": "",
+                "error": str(error),
+            }
+        }
+
+
+def build_compliance_rag_trace_context(content: str) -> Dict[str, Any]:
+    """
+    构建合规审核 Agent 的 RAG Trace 元信息。
+    """
+    rag_query = (
+        "请根据以下待审核营销内容，检索最相关的平台规则、合规风险词、"
+        "绝对化表达、功效承诺、医疗化表达、虚假稀缺和用户评价夸大风险：\n\n"
+        f"{content}"
+    )
+
+    try:
+        rag_result = retrieve_knowledge_with_details(
+            query=rag_query,
+            top_k=3,
+        )
+
+        return {
+            "rag_context": {
+                "enabled": True,
+                "agent": "Compliance Agent",
+                "query": rag_result["query"][:500],
+                "top_k": rag_result["top_k"],
+                "sources": rag_result["sources"],
+                "chunk_count": rag_result["chunk_count"],
+                "used_chromadb": rag_result["used_chromadb"],
+                "fallback_used": False,
+                "retrieved_text_preview": rag_result["retrieved_text"][:300],
+                "error": "",
+            }
+        }
+
+    except Exception as error:
+        return {
+            "rag_context": {
+                "enabled": True,
+                "agent": "Compliance Agent",
+                "query": rag_query[:500],
+                "top_k": 3,
+                "sources": [],
+                "chunk_count": 0,
+                "used_chromadb": False,
+                "fallback_used": True,
+                "retrieved_text_preview": "",
+                "error": str(error),
+            }
+        }
+
+
 def run_agent_with_trace(
     run_id: str,
     step_name: str,
@@ -44,23 +173,11 @@ def run_agent_with_trace(
     input_summary: str,
     agent_func: Callable[..., str],
     *args: Any,
+    extra_trace_fields: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     运行单个 Agent，并记录执行日志。
-
-    参数:
-        run_id: 当前 Supervisor 工作流运行 ID
-        step_name: 当前步骤名称
-        step_description: 当前步骤说明
-        input_summary: 当前 Agent 的输入摘要
-        agent_func: 要执行的 Agent 函数
-        *args: 传给 Agent 函数的位置参数
-        **kwargs: 传给 Agent 函数的关键字参数
-
-    返回:
-        result: Agent 的输出结果
-        trace: 当前 Agent 的执行日志
     """
     start_time = time.perf_counter()
 
@@ -79,6 +196,9 @@ def run_agent_with_trace(
             "error": "",
         }
 
+        if extra_trace_fields:
+            trace.update(extra_trace_fields)
+
         return result, trace
 
     except Exception as error:
@@ -95,6 +215,9 @@ def run_agent_with_trace(
             "error": str(error),
         }
 
+        if extra_trace_fields:
+            trace.update(extra_trace_fields)
+
         return "", trace
 
 
@@ -106,22 +229,6 @@ def run_supervisor_workflow(
 ) -> Dict[str, Any]:
     """
     运行 Supervisor 多 Agent 工作流。
-
-    Supervisor Agent 负责按顺序调度多个专业 Agent：
-
-    1. 销售数据分析 Agent
-    2. 用户评论洞察 Agent
-    3. 内容策略 Agent
-    4. 合规审核 Agent
-
-    参数:
-        df: 商品运营数据表
-        comments: 用户评论数据表
-        selected_product: 用户选择的商品名称
-        progress_callback: 可选进度回调函数，用于前端展示执行进度
-
-    返回:
-        包含多个 Agent 输出结果、run_id 和执行日志的字典
     """
     run_id = generate_run_id()
     traces: List[Dict[str, Any]] = []
@@ -176,16 +283,23 @@ def run_supervisor_workflow(
         "用户评论洞察 Agent 已完成，正在运行内容策略 Agent...",
     )
 
+    content_rag_trace_context = build_content_rag_trace_context(
+        df=df,
+        comments=comments,
+        selected_product=selected_product,
+    )
+
     content_strategy, content_trace = run_agent_with_trace(
         run_id=run_id,
         step_name="内容策略 Agent",
-        step_description="基于商品数据和评论生成小红书笔记、抖音脚本和发布建议",
+        step_description="基于商品数据、用户评论和 RAG 检索结果生成小红书笔记、抖音脚本和发布建议",
         input_summary=(
             f"选中商品：{selected_product}；"
             f"商品运营数据行数：{len(df)}；"
             f"用户评论数据行数：{len(comments)}"
         ),
         agent_func=run_content_strategy_agent,
+        extra_trace_fields=content_rag_trace_context,
         df=df,
         comments=comments,
         selected_product=selected_product,
@@ -198,15 +312,20 @@ def run_supervisor_workflow(
         "内容策略 Agent 已完成，正在运行合规审核 Agent...",
     )
 
+    compliance_rag_trace_context = build_compliance_rag_trace_context(
+        content=content_strategy,
+    )
+
     compliance_review, compliance_trace = run_agent_with_trace(
         run_id=run_id,
         step_name="合规审核 Agent",
-        step_description="审核生成内容是否存在夸大宣传、绝对化表达等风险",
+        step_description="基于生成内容和 RAG 检索结果审核是否存在夸大宣传、绝对化表达等风险",
         input_summary=(
             f"待审核内容长度：{len(content_strategy)} 字符；"
             f"来源：内容策略 Agent 输出"
         ),
         agent_func=run_compliance_agent,
+        extra_trace_fields=compliance_rag_trace_context,
         content=content_strategy,
     )
     traces.append(compliance_trace)

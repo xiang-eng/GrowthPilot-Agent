@@ -6,7 +6,7 @@ GrowthPilot-Agent 是一个面向内容电商场景的 ChromaDB RAG 增强多 Ag
 
 项目基于 DashScope 通义千问、Streamlit、pandas 和 ChromaDB 构建，围绕商品数据、销售数据和用户评论，自动完成经营分析、用户洞察、多商品增长策略、内容策略生成、合规审核、RAG 检索增强、Agent Trace 记录、Markdown 报告导出、Trace JSON 导出和 evals 自动化评测。
 
-本项目不是普通的 AI 文案生成器，而是一个包含多 Agent 编排、ChromaDB 向量检索 RAG、RAG Trace 可观测性、前端 RAG 检索信息展示、报告 RAG 信息汇总和自动化评测的大模型应用工程项目。
+本项目不是普通的 AI 文案生成器，而是一个包含多 Agent 编排、ChromaDB 向量检索 RAG、可配置 Embedding Provider、DashScope Embedding fallback、RAG Trace 可观测性、前端 RAG 检索信息展示、报告 RAG 信息汇总和自动化评测的大模型应用工程项目。
 
 ---
 
@@ -24,10 +24,15 @@ ChromaDB RAG 增强的内容电商多 Agent 商家增长助手
 - Supervisor 工作流调度
 - Prompt 模板管理
 - ChromaDB 向量检索 RAG
+- 本地 hash embedding
+- DashScope Embedding 可选接入
+- 可配置 Embedding Provider
+- DashScope Embedding 失败 fallback 到 hash
 - RAG query 构造
 - RAG 检索结果注入 Prompt
 - RAG Trace 可观测性
 - 前端 RAG 检索信息展示
+- 前端 Embedding 配置信息展示
 - Markdown 报告 RAG 信息汇总
 - Agent Trace JSON 导出
 - run_id 工作流追踪
@@ -53,6 +58,7 @@ ChromaDB RAG 增强的内容电商多 Agent 商家增长助手
 8. 记录 Agent 执行链路，方便调试和复盘
 9. 参考平台规则和内容风格，降低生成内容失控风险
 10. 查看 RAG 检索到底命中了哪些知识库内容
+11. 查看当前 RAG 使用的是哪种 Embedding Provider
 
 传统方式依赖人工分析，效率低、复盘难、合规风险高。
 
@@ -75,6 +81,8 @@ knowledge_base Markdown 知识库
     ↓
 rag_service.py 构建 ChromaDB 向量索引
     ↓
+根据 EMBEDDING_PROVIDER 生成 embedding
+    ↓
 retrieve_knowledge_with_details() 检索相关知识片段
     ↓
 Content Agent / Compliance Agent 注入 RAG 上下文
@@ -83,7 +91,7 @@ Supervisor Agent 调度多 Agent 工作流
     ↓
 Agent Trace 记录
     ↓
-前端展示 RAG 检索信息
+前端展示 RAG 检索信息和 Embedding 配置信息
     ↓
 Markdown 报告写入 RAG 检索汇总
     ↓
@@ -203,7 +211,12 @@ app/rag_service.py
 read_markdown_file()
 load_knowledge_documents()
 split_text_into_chunks()
+normalize_embedding()
+resize_embedding()
 build_hash_embedding()
+build_dashscope_embedding()
+build_embedding()
+get_embedding_runtime_info()
 get_chroma_client()
 reset_knowledge_collection()
 get_knowledge_collection()
@@ -225,7 +238,7 @@ knowledge_base Markdown 文档
     ↓
 split_text_into_chunks() 切分 chunk
     ↓
-build_hash_embedding() 生成本地哈希 embedding
+build_embedding() 根据配置生成 embedding
     ↓
 写入 ChromaDB PersistentClient
     ↓
@@ -236,25 +249,74 @@ build_hash_embedding() 生成本地哈希 embedding
 注入 Content Agent / Compliance Agent Prompt
 ```
 
-当前 embedding 使用本地哈希 embedding。
+---
 
-优点：
+## 8. Embedding Provider 设计
+
+项目支持可配置 Embedding Provider。
+
+配置文件：
+
+```text
+.env
+.env.example
+app/config.py
+```
+
+核心配置：
+
+```env
+EMBEDDING_PROVIDER=hash
+EMBEDDING_MODEL=text-embedding-v4
+EMBEDDING_DIMENSION=64
+```
+
+当前支持：
+
+| provider | 说明 |
+|---|---|
+| hash | 默认本地哈希 embedding，不依赖外部服务，适合稳定评测和本地演示 |
+| dashscope | 使用 DashScope Embedding，调用失败时自动 fallback 到 hash |
+
+默认使用：
+
+```text
+EMBEDDING_PROVIDER=hash
+```
+
+这样项目在没有额外 embedding API 调用的情况下也能稳定运行。
+
+如果改成：
+
+```text
+EMBEDDING_PROVIDER=dashscope
+```
+
+系统会优先调用 DashScope Embedding。如果 DashScope API Key 不存在、网络失败、额度不足或服务异常，系统会自动 fallback 到本地 hash embedding。
+
+---
+
+## 9. 为什么保留 hash embedding
+
+当前项目默认使用 hash embedding，原因是：
 
 - 不需要额外 API Key
 - 不依赖外网下载模型
+- 不消耗 embedding API 额度
 - 本地运行稳定
 - 方便 evals 自动化评测
 - 可以完整展示 ChromaDB RAG 工程链路
+- 可以作为 DashScope Embedding 失败时的 fallback
 
 不足：
 
 - 语义理解能力不如真实 embedding 模型
 - 检索质量有限
-- 后续可替换为 DashScope Embedding、OpenAI Embedding 或 sentence-transformers
+- 后续可以替换为 DashScope Embedding、OpenAI Embedding 或 sentence-transformers
 
 ---
 
-## 8. RAG 可观测性设计
+## 10. RAG 可观测性设计
 
 项目不仅做了 RAG 检索，还记录了 RAG 检索过程。
 
@@ -267,6 +329,10 @@ top_k
 sources
 chunk_count
 used_chromadb
+embedding_provider
+embedding_model
+embedding_dimension
+fallback_provider
 ```
 
 Supervisor Trace 中额外记录：
@@ -288,6 +354,10 @@ used_chromadb
 fallback_used
 retrieved_text_preview
 error
+embedding_provider
+embedding_model
+embedding_dimension
+fallback_provider
 ```
 
 这使得每次 Agent 运行后都能看到：
@@ -298,10 +368,13 @@ error
 - 是否使用了 ChromaDB
 - 是否触发 fallback
 - 检索片段预览是什么
+- 当前使用的 embedding provider 是什么
+- 当前 embedding model 是什么
+- 当前 embedding dimension 是多少
 
 ---
 
-## 9. 前端 RAG 检索信息展示
+## 11. 前端 RAG 检索信息展示
 
 Streamlit 页面已经新增 RAG 检索信息展示。
 
@@ -321,6 +394,10 @@ chunk_count
 sources
 RAG Query
 检索片段预览
+embedding_provider
+embedding_model
+embedding_dimension
+fallback_provider
 ```
 
 同时在 Trace 执行日志中，内容策略 Agent 和合规审核 Agent 的展开项里也会显示对应的 RAG 检索元信息。
@@ -331,9 +408,15 @@ RAG Query
 这个 Agent 不是凭空生成，而是先检索了知识库，并且能看到命中了哪些知识。
 ```
 
+也可以进一步展示：
+
+```text
+当前 RAG 使用的是 hash embedding，后续可以通过配置切换 DashScope Embedding。
+```
+
 ---
 
-## 10. Markdown 报告 RAG 汇总
+## 12. Markdown 报告 RAG 汇总
 
 项目在 `app/report_service.py` 中增强了 Markdown 报告导出能力。
 
@@ -360,7 +443,7 @@ RAG Query
 
 ---
 
-## 11. knowledge_service.py 兜底能力
+## 13. knowledge_service.py 兜底能力
 
 项目保留：
 
@@ -389,7 +472,7 @@ load_all_knowledge()
 
 ---
 
-## 12. Content Strategy Agent 如何接入 RAG
+## 14. Content Strategy Agent 如何接入 RAG
 
 Content Strategy Agent 原始输入：
 
@@ -422,7 +505,7 @@ RAG 检索元信息
 
 ---
 
-## 13. Compliance Agent 如何接入 RAG
+## 15. Compliance Agent 如何接入 RAG
 
 Compliance Agent 原始输入：
 
@@ -460,7 +543,7 @@ RAG 检索元信息
 
 ---
 
-## 14. Agent Trace 可观测性
+## 16. Agent Trace 可观测性
 
 项目会记录每个 Agent 的执行日志。
 
@@ -487,16 +570,17 @@ Trace 字段包括：
 - 输出预览是什么
 - 是否有错误
 - RAG 检索命中了什么知识
+- RAG 当前使用什么 embedding 配置
 
 这让项目更接近真实 Agent 平台的可观测性设计。
 
 ---
 
-## 15. 数据设计
+## 17. 数据设计
 
 项目使用三类 CSV 数据。
 
-### 15.1 商品数据
+### 17.1 商品数据
 
 ```text
 data/product.csv
@@ -513,7 +597,7 @@ data/product.csv
 
 ---
 
-### 15.2 销售数据
+### 17.2 销售数据
 
 ```text
 data/sales.csv
@@ -531,7 +615,7 @@ data/sales.csv
 
 ---
 
-### 15.3 评论数据
+### 17.3 评论数据
 
 ```text
 data/comments.csv
@@ -547,7 +631,7 @@ data/comments.csv
 
 ---
 
-## 16. 运营指标
+## 18. 运营指标
 
 项目自动计算：
 
@@ -562,7 +646,7 @@ data/comments.csv
 
 ---
 
-## 17. Prompt 工程化
+## 19. Prompt 工程化
 
 项目将 Prompt 从 Python 代码中拆出，统一放在：
 
@@ -589,7 +673,7 @@ batch_growth_prompt.txt
 
 ---
 
-## 18. 大模型配置工程化
+## 20. 大模型配置工程化
 
 项目通过 `.env` 管理大模型配置。
 
@@ -600,6 +684,10 @@ DASHSCOPE_API_KEY=your_dashscope_api_key_here
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen-plus
 QWEN_TEMPERATURE=0.7
+
+EMBEDDING_PROVIDER=hash
+EMBEDDING_MODEL=text-embedding-v4
+EMBEDDING_DIMENSION=64
 ```
 
 配置统一在：
@@ -614,23 +702,11 @@ app/config.py
 app/llm.py
 ```
 
-`call_qwen()` 支持：
-
-```python
-call_qwen(prompt)
-```
-
-也支持：
-
-```python
-call_qwen(prompt, model="qwen-plus", temperature=0.2)
-```
-
-这样避免模型名称、temperature 和 API Key 写死在业务代码中。
+RAG embedding 配置也统一由 `app/config.py` 读取。
 
 ---
 
-## 19. Streamlit 页面功能
+## 21. Streamlit 页面功能
 
 页面包含：
 
@@ -650,13 +726,14 @@ call_qwen(prompt, model="qwen-plus", temperature=0.2)
 14. 当前 run_id 展示
 15. Agent Trace 执行日志
 16. RAG 检索信息展示
-17. Markdown 报告下载
-18. Agent Trace JSON 下载
-19. 合规审核 Agent
+17. Embedding 配置信息展示
+18. Markdown 报告下载
+19. Agent Trace JSON 下载
+20. 合规审核 Agent
 
 ---
 
-## 20. 报告导出
+## 22. 报告导出
 
 项目支持导出 Markdown 增长报告。
 
@@ -680,7 +757,7 @@ outputs/growth_report.md
 
 ---
 
-## 21. Trace JSON 导出
+## 23. Trace JSON 导出
 
 项目支持导出结构化 Trace JSON。
 
@@ -714,7 +791,7 @@ rag_context
 
 ---
 
-## 22. evals 自动化评测
+## 24. evals 自动化评测
 
 项目构建了 evals 自动化评测脚本。
 
@@ -765,7 +842,7 @@ evals 覆盖：
 
 ---
 
-## 23. final_project_check 最终交付检查
+## 25. final_project_check 最终交付检查
 
 项目提供：
 
@@ -794,7 +871,7 @@ python final_project_check.py --with-llm
 
 ---
 
-## 24. .gitignore 安全控制
+## 26. .gitignore 安全控制
 
 项目通过 `.gitignore` 避免上传敏感文件和运行产物。
 
@@ -827,7 +904,7 @@ requirements_freeze.txt
 
 ---
 
-## 25. 当前项目完成度
+## 27. 当前项目完成度
 
 当前项目完成度较高，已经具备简历项目条件。
 
@@ -836,10 +913,14 @@ requirements_freeze.txt
 - 多 Agent 架构
 - Supervisor 工作流
 - ChromaDB RAG 检索
-- 本地哈希 embedding
+- 本地 hash embedding
+- DashScope Embedding 可选接入
+- 可配置 Embedding Provider
+- DashScope Embedding fallback 到 hash
 - RAG 检索元信息返回
 - RAG Trace 可观测性
 - 前端 RAG 检索信息展示
+- 前端 Embedding 配置信息展示
 - Markdown 报告 RAG 检索信息汇总
 - Agent Trace
 - run_id
@@ -869,19 +950,19 @@ ChromaDB RAG 增强的内容电商多 Agent 商家增长助手
 
 ---
 
-## 26. 简历项目描述
+## 28. 简历项目描述
 
 GrowthPilot-Agent 是一个面向内容电商场景的 ChromaDB RAG 增强多 Agent 商家增长助手。项目基于 DashScope 通义千问、Streamlit、pandas 和 ChromaDB 构建，设计 Sales Analysis Agent、User Insight Agent、Batch Growth Agent、Content Strategy Agent、Compliance Agent 和 Supervisor Agent，实现从商品经营分析、用户评论洞察、多商品增长策略、RAG 知识检索、内容策略生成到合规审核的完整业务闭环。
 
-项目将内容平台规则、内容风格指南和合规风险词沉淀为 Markdown 知识库，通过 `rag_service.py` 完成文档读取、chunk 切分、本地哈希 embedding、ChromaDB 持久化存储和 Top-K 检索，并将检索结果注入 Content Strategy Agent 和 Compliance Agent 的 Prompt 中，提高内容生成的业务一致性和合规可控性。
+项目将内容平台规则、内容风格指南和合规风险词沉淀为 Markdown 知识库，通过 `rag_service.py` 完成文档读取、chunk 切分、可配置 embedding、ChromaDB 持久化存储和 Top-K 检索。系统默认使用本地 hash embedding，保证本地稳定运行和评测通过；同时支持通过 `EMBEDDING_PROVIDER=dashscope` 切换为 DashScope Embedding，并在调用失败时自动 fallback 到 hash embedding。
 
-系统实现 RAG Trace 可观测性，为每次 Supervisor 工作流生成唯一 run_id，记录每个 Agent 的执行状态、耗时、输入摘要、输出预览和错误信息，并额外记录 RAG query、命中 sources、chunk_count、used_chromadb、fallback_used 和检索片段预览；同时支持在前端页面展示 RAG 检索信息，并将 RAG 检索信息写入 Markdown 增长报告和 Trace JSON 文件。
+系统实现 RAG Trace 可观测性，为每次 Supervisor 工作流生成唯一 run_id，记录每个 Agent 的执行状态、耗时、输入摘要、输出预览和错误信息，并额外记录 RAG query、命中 sources、chunk_count、used_chromadb、fallback_used、embedding_provider、embedding_model、embedding_dimension 和检索片段预览；同时支持在前端页面展示 RAG 检索信息，并将 RAG 检索信息写入 Markdown 增长报告和 Trace JSON 文件。
 
 项目构建 evals 自动化评测脚本，覆盖文件完整性、环境变量配置、知识库文件、knowledge_service 核心函数、rag_service 核心函数、ChromaDB 索引构建、RAG 检索结果、默认数据字段、examples 上传示例数据、运营指标生成、Prompt 模板变量检查、Prompt 渲染、Supervisor 静态能力、report_service 导出函数检查、Agent Trace JSON 结构校验和合规审核能力；当前本地静态评测 117/117 通过。
 
 ---
 
-## 27. 面试讲解重点
+## 29. 面试讲解重点
 
 面试时可以重点讲：
 
@@ -891,31 +972,34 @@ GrowthPilot-Agent 是一个面向内容电商场景的 ChromaDB RAG 增强多 Ag
 4. 为什么要引入 RAG 知识库
 5. knowledge_base 里放了哪些知识
 6. rag_service.py 如何读取文档、切分 chunk、生成 embedding、写入 ChromaDB
-7. 当前为什么使用本地哈希 embedding
-8. 如何升级为 DashScope Embedding 或 sentence-transformers
-9. Content Agent 如何构造 RAG query
-10. Compliance Agent 如何构造 RAG query
-11. RAG query、sources、chunk_count 如何写入 Trace
-12. 前端如何展示 RAG 检索信息
-13. Markdown 报告为什么要写入 RAG 检索信息
-14. Agent Trace 为什么重要
-15. run_id 如何追踪每次工作流
-16. progress_callback 如何驱动前端进度条
-17. Prompt 为什么要拆成模板文件
-18. 为什么要做 Trace JSON 导出
-19. evals 为什么要检查 Prompt、数据、Trace 和 RAG
-20. LLM 服务不可用时为什么要 SKIP 而不是 FAIL
-21. final_project_check.py 解决了什么问题
-22. `.gitignore` 如何避免密钥误传
-23. 项目如何从 demo 变成工程化应用
+7. 当前为什么默认使用本地 hash embedding
+8. 如何通过配置切换 DashScope Embedding
+9. DashScope Embedding 失败时如何 fallback 到 hash
+10. 本地 hash embedding 和真实语义 embedding 的区别
+11. Content Agent 如何构造 RAG query
+12. Compliance Agent 如何构造 RAG query
+13. RAG query、sources、chunk_count 如何写入 Trace
+14. embedding_provider、embedding_model、embedding_dimension 如何写入 Trace
+15. 前端如何展示 RAG 检索信息和 embedding 配置
+16. Markdown 报告为什么要写入 RAG 检索信息
+17. Agent Trace 为什么重要
+18. run_id 如何追踪每次工作流
+19. progress_callback 如何驱动前端进度条
+20. Prompt 为什么要拆成模板文件
+21. 为什么要做 Trace JSON 导出
+22. evals 为什么要检查 Prompt、数据、Trace 和 RAG
+23. LLM 服务不可用时为什么要 SKIP 而不是 FAIL
+24. final_project_check.py 解决了什么问题
+25. `.gitignore` 如何避免密钥误传
+26. 项目如何从 demo 变成工程化应用
 
 ---
 
-## 28. 后续可升级方向
+## 30. 后续可升级方向
 
-### 28.1 真实 Embedding 模型
+### 30.1 真实 Embedding 模型增强
 
-将当前本地哈希 embedding 升级为真实 embedding：
+继续增强真实 embedding：
 
 ```text
 DashScope Embedding
@@ -931,7 +1015,7 @@ sentence-transformers
 
 ---
 
-### 28.2 RAG 检索增强
+### 30.2 RAG 检索增强
 
 可以继续增加：
 
@@ -944,7 +1028,7 @@ sentence-transformers
 
 ---
 
-### 28.3 LangGraph 工作流
+### 30.3 LangGraph 工作流
 
 将当前自定义 Supervisor 工作流升级为 LangGraph 状态图。
 
@@ -957,7 +1041,7 @@ sentence-transformers
 
 ---
 
-### 28.4 Docker 部署
+### 30.4 Docker 部署
 
 补充：
 
@@ -970,7 +1054,7 @@ docker-compose.yml
 
 ---
 
-### 28.5 GitHub Actions
+### 30.5 GitHub Actions
 
 补充 CI：
 
@@ -982,7 +1066,7 @@ push / pull_request 时自动运行 evals
 
 ---
 
-### 28.6 报告格式扩展
+### 30.6 报告格式扩展
 
 支持：
 

@@ -8,15 +8,12 @@ from app.agents.compliance_agent import run_compliance_agent
 from app.agents.content_agent import run_content_strategy_agent
 from app.agents.insight_agent import run_user_insight_agent
 from app.agents.sales_agent import run_sales_analysis_agent
-from app.rag_service import retrieve_knowledge_with_details
+from app.rag_service import get_embedding_runtime_info, retrieve_knowledge_with_details
 
 
 def generate_run_id() -> str:
     """
     生成一次 Supervisor 工作流运行的唯一 ID。
-
-    返回:
-        形如 run_xxxxxxxxxxxx 的字符串
     """
     return f"run_{uuid.uuid4().hex[:12]}"
 
@@ -28,14 +25,37 @@ def notify_progress(
 ) -> None:
     """
     通知前端当前工作流执行进度。
-
-    参数:
-        progress_callback: 前端传入的进度更新函数
-        progress: 当前进度，范围 0-100
-        message: 当前执行状态说明
     """
     if progress_callback is not None:
         progress_callback(progress, message)
+
+
+def build_default_rag_context(
+    agent_name: str,
+    query: str = "",
+    error: str = "",
+) -> Dict[str, Any]:
+    """
+    构建默认 RAG Trace 上下文。
+    """
+    embedding_info = get_embedding_runtime_info()
+
+    return {
+        "enabled": True,
+        "agent": agent_name,
+        "query": query[:500],
+        "top_k": 3,
+        "sources": [],
+        "chunk_count": 0,
+        "used_chromadb": False,
+        "fallback_used": True,
+        "retrieved_text_preview": "",
+        "error": error,
+        "embedding_provider": embedding_info["embedding_provider"],
+        "embedding_model": embedding_info["embedding_model"],
+        "embedding_dimension": embedding_info["embedding_dimension"],
+        "fallback_provider": embedding_info["fallback_provider"],
+    }
 
 
 def build_content_rag_trace_context(
@@ -50,18 +70,10 @@ def build_content_rag_trace_context(
 
     if product_info.empty:
         return {
-            "rag_context": {
-                "enabled": True,
-                "agent": "Content Strategy Agent",
-                "query": "",
-                "top_k": 3,
-                "sources": [],
-                "chunk_count": 0,
-                "used_chromadb": False,
-                "fallback_used": True,
-                "retrieved_text_preview": "",
-                "error": f"未找到选中商品：{selected_product}",
-            }
+            "rag_context": build_default_rag_context(
+                agent_name="Content Strategy Agent",
+                error=f"未找到选中商品：{selected_product}",
+            )
         }
 
     product_id = product_info.iloc[0]["product_id"]
@@ -98,23 +110,20 @@ def build_content_rag_trace_context(
                 "fallback_used": False,
                 "retrieved_text_preview": rag_result["retrieved_text"][:300],
                 "error": "",
+                "embedding_provider": rag_result.get("embedding_provider", ""),
+                "embedding_model": rag_result.get("embedding_model", ""),
+                "embedding_dimension": rag_result.get("embedding_dimension", 0),
+                "fallback_provider": rag_result.get("fallback_provider", "hash"),
             }
         }
 
     except Exception as error:
         return {
-            "rag_context": {
-                "enabled": True,
-                "agent": "Content Strategy Agent",
-                "query": rag_query[:500],
-                "top_k": 3,
-                "sources": [],
-                "chunk_count": 0,
-                "used_chromadb": False,
-                "fallback_used": True,
-                "retrieved_text_preview": "",
-                "error": str(error),
-            }
+            "rag_context": build_default_rag_context(
+                agent_name="Content Strategy Agent",
+                query=rag_query,
+                error=str(error),
+            )
         }
 
 
@@ -146,23 +155,20 @@ def build_compliance_rag_trace_context(content: str) -> Dict[str, Any]:
                 "fallback_used": False,
                 "retrieved_text_preview": rag_result["retrieved_text"][:300],
                 "error": "",
+                "embedding_provider": rag_result.get("embedding_provider", ""),
+                "embedding_model": rag_result.get("embedding_model", ""),
+                "embedding_dimension": rag_result.get("embedding_dimension", 0),
+                "fallback_provider": rag_result.get("fallback_provider", "hash"),
             }
         }
 
     except Exception as error:
         return {
-            "rag_context": {
-                "enabled": True,
-                "agent": "Compliance Agent",
-                "query": rag_query[:500],
-                "top_k": 3,
-                "sources": [],
-                "chunk_count": 0,
-                "used_chromadb": False,
-                "fallback_used": True,
-                "retrieved_text_preview": "",
-                "error": str(error),
-            }
+            "rag_context": build_default_rag_context(
+                agent_name="Compliance Agent",
+                query=rag_query,
+                error=str(error),
+            )
         }
 
 

@@ -116,6 +116,25 @@ def render_rag_context(rag_context: Dict[str, Any], key_prefix: str) -> None:
         str(rag_context.get("chunk_count", 0)),
     )
 
+    embedding_col1, embedding_col2, embedding_col3, embedding_col4 = st.columns(4)
+
+    embedding_col1.metric(
+        "embedding_provider",
+        str(rag_context.get("embedding_provider", "")),
+    )
+    embedding_col2.metric(
+        "embedding_model",
+        str(rag_context.get("embedding_model", "")),
+    )
+    embedding_col3.metric(
+        "embedding_dimension",
+        str(rag_context.get("embedding_dimension", 0)),
+    )
+    embedding_col4.metric(
+        "fallback_provider",
+        str(rag_context.get("fallback_provider", "")),
+    )
+
     st.markdown(f"**Agent：** {rag_context.get('agent', '')}")
 
     sources = rag_context.get("sources", [])
@@ -289,6 +308,7 @@ def main() -> None:
         13. 工作流 run_id 追踪  
         14. Supervisor 工作流进度展示  
         15. RAG query、sources、chunk_count 和检索片段预览展示  
+        16. embedding_provider、embedding_model 和 embedding_dimension 展示  
         """
     )
 

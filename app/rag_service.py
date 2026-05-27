@@ -1,17 +1,32 @@
 import hashlib
 import math
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 import chromadb
+from openai import OpenAI
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+
+if str(BASE_DIR) not in sys.path:
+    sys.path.append(str(BASE_DIR))
+
+
+from app.config import (
+    DASHSCOPE_API_KEY,
+    DASHSCOPE_BASE_URL,
+    EMBEDDING_DIMENSION,
+    EMBEDDING_MODEL,
+    EMBEDDING_PROVIDER,
+)
+
+
 KNOWLEDGE_BASE_DIR = BASE_DIR / "knowledge_base"
 VECTOR_DB_DIR = BASE_DIR / "vector_db"
 
 COLLECTION_NAME = "growthpilot_knowledge"
-EMBEDDING_DIMENSION = 64
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_CHUNK_OVERLAP = 80
 
@@ -91,12 +106,51 @@ def split_text_into_chunks(
     return chunks
 
 
-def build_hash_embedding(text: str, dimension: int = EMBEDDING_DIMENSION) -> List[float]:
+def normalize_embedding(vector: List[float]) -> List[float]:
+    """
+    对 embedding 向量做 L2 归一化。
+    """
+    norm = math.sqrt(sum(value * value for value in vector))
+
+    if norm == 0:
+        return vector
+
+    return [value / norm for value in vector]
+
+
+def resize_embedding(
+    vector: List[float],
+    dimension: int = EMBEDDING_DIMENSION,
+) -> List[float]:
+    """
+    将任意维度 embedding 压缩或扩展到固定维度。
+
+    这样可以保证 ChromaDB collection 的维度稳定。
+    默认 hash embedding 和 DashScope embedding 都会落到同一维度。
+    """
+    if dimension <= 0:
+        raise ValueError("dimension 必须大于 0")
+
+    if not vector:
+        return [0.0 for _ in range(dimension)]
+
+    resized = [0.0 for _ in range(dimension)]
+
+    for index, value in enumerate(vector):
+        bucket = index % dimension
+        resized[bucket] += float(value)
+
+    return normalize_embedding(resized)
+
+
+def build_hash_embedding(
+    text: str,
+    dimension: int = EMBEDDING_DIMENSION,
+) -> List[float]:
     """
     使用本地哈希方法生成确定性 embedding。
 
     这是一个轻量本地 embedding，用于保证项目无需额外 API Key 也能运行。
-    后续可以替换为真实 embedding 模型。
     """
     if dimension <= 0:
         raise ValueError("dimension 必须大于 0")
@@ -124,12 +178,76 @@ def build_hash_embedding(text: str, dimension: int = EMBEDDING_DIMENSION) -> Lis
         sign = 1.0 if int(digest[8:10], 16) % 2 == 0 else -1.0
         vector[bucket] += sign
 
-    norm = math.sqrt(sum(value * value for value in vector))
+    return normalize_embedding(vector)
 
-    if norm == 0:
-        return vector
 
-    return [value / norm for value in vector]
+def get_dashscope_embedding_client() -> OpenAI:
+    """
+    获取 DashScope OpenAI 兼容模式客户端。
+    """
+    if not DASHSCOPE_API_KEY:
+        raise ValueError("DASHSCOPE_API_KEY 未配置，无法使用 DashScope Embedding")
+
+    return OpenAI(
+        api_key=DASHSCOPE_API_KEY,
+        base_url=DASHSCOPE_BASE_URL,
+    )
+
+
+def build_dashscope_embedding(text: str) -> List[float]:
+    """
+    使用 DashScope Embedding 生成向量。
+
+    返回前会压缩到 EMBEDDING_DIMENSION，保证和本地 hash embedding 维度一致。
+    """
+    if not text.strip():
+        return [0.0 for _ in range(EMBEDDING_DIMENSION)]
+
+    client = get_dashscope_embedding_client()
+
+    response = client.embeddings.create(
+        model=EMBEDDING_MODEL,
+        input=text,
+    )
+
+    embedding = response.data[0].embedding
+
+    return resize_embedding(
+        vector=embedding,
+        dimension=EMBEDDING_DIMENSION,
+    )
+
+
+def build_embedding(text: str) -> List[float]:
+    """
+    根据配置生成 embedding。
+
+    EMBEDDING_PROVIDER=hash：
+        使用本地哈希 embedding。
+
+    EMBEDDING_PROVIDER=dashscope：
+        优先使用 DashScope Embedding。
+        如果 DashScope 调用失败，自动 fallback 到本地哈希 embedding。
+    """
+    if EMBEDDING_PROVIDER == "dashscope":
+        try:
+            return build_dashscope_embedding(text)
+        except Exception:
+            return build_hash_embedding(text)
+
+    return build_hash_embedding(text)
+
+
+def get_embedding_runtime_info() -> Dict[str, Any]:
+    """
+    返回当前 embedding 配置信息。
+    """
+    return {
+        "embedding_provider": EMBEDDING_PROVIDER,
+        "embedding_model": EMBEDDING_MODEL,
+        "embedding_dimension": EMBEDDING_DIMENSION,
+        "fallback_provider": "hash",
+    }
 
 
 def get_chroma_client():
@@ -210,7 +328,7 @@ def index_knowledge_base(reset: bool = True) -> int:
     ids = [chunk["id"] for chunk in chunks]
     documents = [chunk["content"] for chunk in chunks]
     metadatas = [{"source": chunk["source"]} for chunk in chunks]
-    embeddings = [build_hash_embedding(chunk["content"]) for chunk in chunks]
+    embeddings = [build_embedding(chunk["content"]) for chunk in chunks]
 
     collection.add(
         ids=ids,
@@ -237,15 +355,9 @@ def ensure_knowledge_index() -> None:
 def retrieve_knowledge_with_details(query: str, top_k: int = 3) -> Dict[str, Any]:
     """
     根据 query 从 ChromaDB 检索相关知识片段，并返回可用于 Trace 的详细信息。
-
-    返回字段：
-        retrieved_text: 拼接后的检索文本
-        query: 原始检索问题
-        top_k: 检索数量
-        sources: 命中的知识库来源文件
-        chunk_count: 命中的 chunk 数量
-        used_chromadb: 是否使用 ChromaDB
     """
+    runtime_info = get_embedding_runtime_info()
+
     if not query.strip():
         return {
             "retrieved_text": "",
@@ -254,6 +366,7 @@ def retrieve_knowledge_with_details(query: str, top_k: int = 3) -> Dict[str, Any
             "sources": [],
             "chunk_count": 0,
             "used_chromadb": False,
+            **runtime_info,
         }
 
     if top_k <= 0:
@@ -262,7 +375,7 @@ def retrieve_knowledge_with_details(query: str, top_k: int = 3) -> Dict[str, Any
     ensure_knowledge_index()
 
     collection = get_knowledge_collection()
-    query_embedding = build_hash_embedding(query)
+    query_embedding = build_embedding(query)
 
     results = collection.query(
         query_embeddings=[query_embedding],
@@ -297,6 +410,7 @@ def retrieve_knowledge_with_details(query: str, top_k: int = 3) -> Dict[str, Any
         "sources": unique_sources,
         "chunk_count": len(documents),
         "used_chromadb": True,
+        **runtime_info,
     }
 
 
@@ -315,8 +429,16 @@ def retrieve_knowledge(query: str, top_k: int = 3) -> str:
 
 
 if __name__ == "__main__":
+    runtime_info = get_embedding_runtime_info()
+
+    print("Embedding 配置信息：")
+    print(f"provider: {runtime_info['embedding_provider']}")
+    print(f"model: {runtime_info['embedding_model']}")
+    print(f"dimension: {runtime_info['embedding_dimension']}")
+    print(f"fallback_provider: {runtime_info['fallback_provider']}")
+
     total_chunks = index_knowledge_base(reset=True)
-    print(f"知识库索引构建完成，写入片段数: {total_chunks}")
+    print(f"\n知识库索引构建完成，写入片段数: {total_chunks}")
 
     demo_query = "小红书内容生成需要注意哪些合规表达？"
     retrieved_result = retrieve_knowledge_with_details(demo_query, top_k=3)
@@ -330,3 +452,6 @@ if __name__ == "__main__":
     print(f"sources: {retrieved_result['sources']}")
     print(f"chunk_count: {retrieved_result['chunk_count']}")
     print(f"used_chromadb: {retrieved_result['used_chromadb']}")
+    print(f"embedding_provider: {retrieved_result['embedding_provider']}")
+    print(f"embedding_model: {retrieved_result['embedding_model']}")
+    print(f"embedding_dimension: {retrieved_result['embedding_dimension']}")

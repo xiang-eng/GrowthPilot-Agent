@@ -23,15 +23,7 @@ def get_float_env(
     """
     从环境变量中读取 float 类型配置。
 
-    如果环境变量不存在，返回默认值。
-    如果环境变量无法转换为 float，也返回默认值。
-
-    参数:
-        key: 环境变量名称
-        default: 默认值
-
-    返回:
-        float 类型配置值
+    如果环境变量不存在或无法转换为 float，则返回默认值。
     """
     value = os.getenv(key)
 
@@ -40,6 +32,26 @@ def get_float_env(
 
     try:
         return float(value)
+    except ValueError:
+        return default
+
+
+def get_int_env(
+    key: str,
+    default: int,
+) -> int:
+    """
+    从环境变量中读取 int 类型配置。
+
+    如果环境变量不存在或无法转换为 int，则返回默认值。
+    """
+    value = os.getenv(key)
+
+    if value is None:
+        return default
+
+    try:
+        return int(value)
     except ValueError:
         return default
 
@@ -59,4 +71,19 @@ QWEN_MODEL = os.getenv(
 QWEN_TEMPERATURE = get_float_env(
     "QWEN_TEMPERATURE",
     0.7,
+)
+
+EMBEDDING_PROVIDER = os.getenv(
+    "EMBEDDING_PROVIDER",
+    "hash",
+).strip().lower()
+
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL",
+    "text-embedding-v4",
+).strip()
+
+EMBEDDING_DIMENSION = get_int_env(
+    "EMBEDDING_DIMENSION",
+    64,
 )

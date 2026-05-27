@@ -11,6 +11,55 @@ REPORT_PATH = OUTPUT_DIR / "growth_report.md"
 TRACE_PATH = OUTPUT_DIR / "agent_trace.json"
 
 
+def build_rag_context_section(rag_context: Dict[str, Any]) -> str:
+    """
+    构建单个 Agent 的 RAG 检索信息 Markdown。
+    """
+    if not rag_context:
+        return ""
+
+    lines = []
+
+    lines.append("")
+    lines.append("RAG 检索信息：")
+    lines.append("")
+    lines.append(f"- Agent：{rag_context.get('agent', '')}")
+    lines.append(f"- used_chromadb：{rag_context.get('used_chromadb', False)}")
+    lines.append(f"- fallback_used：{rag_context.get('fallback_used', False)}")
+    lines.append(f"- top_k：{rag_context.get('top_k', 0)}")
+    lines.append(f"- chunk_count：{rag_context.get('chunk_count', 0)}")
+    lines.append(f"- sources：{rag_context.get('sources', [])}")
+
+    query = rag_context.get("query", "")
+    if query:
+        lines.append("")
+        lines.append("RAG Query：")
+        lines.append("")
+        lines.append("```text")
+        lines.append(query)
+        lines.append("```")
+
+    retrieved_text_preview = rag_context.get("retrieved_text_preview", "")
+    if retrieved_text_preview:
+        lines.append("")
+        lines.append("检索片段预览：")
+        lines.append("")
+        lines.append("```text")
+        lines.append(retrieved_text_preview)
+        lines.append("```")
+
+    error = rag_context.get("error", "")
+    if error:
+        lines.append("")
+        lines.append("RAG 检索错误：")
+        lines.append("")
+        lines.append("```text")
+        lines.append(error)
+        lines.append("```")
+
+    return "\n".join(lines)
+
+
 def build_trace_section(traces: List[Dict[str, Any]]) -> str:
     """
     构建 Agent Trace 执行日志部分。
@@ -35,6 +84,12 @@ def build_trace_section(traces: List[Dict[str, Any]]) -> str:
         lines.append(f"- 执行状态：{trace.get('status', '')}")
         lines.append(f"- 执行耗时：{trace.get('duration_seconds', 0)} 秒")
 
+        rag_context = trace.get("rag_context", {})
+        rag_context_section = build_rag_context_section(rag_context)
+
+        if rag_context_section:
+            lines.append(rag_context_section)
+
         output_preview = trace.get("output_preview", "")
         error = trace.get("error", "")
 
@@ -49,6 +104,64 @@ def build_trace_section(traces: List[Dict[str, Any]]) -> str:
             lines.append("错误信息：")
             lines.append("")
             lines.append(error)
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def build_rag_summary_section(traces: List[Dict[str, Any]]) -> str:
+    """
+    构建报告中的 RAG 检索汇总部分。
+    """
+    rag_traces = [
+        trace for trace in traces
+        if trace.get("rag_context")
+    ]
+
+    if not rag_traces:
+        return "暂无 RAG 检索信息。\n"
+
+    lines = []
+
+    for index, trace in enumerate(rag_traces, start=1):
+        rag_context = trace.get("rag_context", {})
+
+        lines.append(f"### {index}. {trace.get('step', '未知步骤')}")
+        lines.append("")
+        lines.append(f"- Agent：{rag_context.get('agent', '')}")
+        lines.append(f"- used_chromadb：{rag_context.get('used_chromadb', False)}")
+        lines.append(f"- fallback_used：{rag_context.get('fallback_used', False)}")
+        lines.append(f"- top_k：{rag_context.get('top_k', 0)}")
+        lines.append(f"- chunk_count：{rag_context.get('chunk_count', 0)}")
+        lines.append(f"- sources：{rag_context.get('sources', [])}")
+
+        query = rag_context.get("query", "")
+        if query:
+            lines.append("")
+            lines.append("RAG Query：")
+            lines.append("")
+            lines.append("```text")
+            lines.append(query)
+            lines.append("```")
+
+        retrieved_text_preview = rag_context.get("retrieved_text_preview", "")
+        if retrieved_text_preview:
+            lines.append("")
+            lines.append("检索片段预览：")
+            lines.append("")
+            lines.append("```text")
+            lines.append(retrieved_text_preview)
+            lines.append("```")
+
+        error = rag_context.get("error", "")
+        if error:
+            lines.append("")
+            lines.append("RAG 检索错误：")
+            lines.append("")
+            lines.append("```text")
+            lines.append(error)
+            lines.append("```")
 
         lines.append("")
 
@@ -79,6 +192,7 @@ def build_growth_report(
     traces = supervisor_result.get("traces", [])
 
     trace_section = build_trace_section(traces)
+    rag_summary_section = build_rag_summary_section(traces)
 
     report = f"""# GrowthPilot-Agent 内容电商多 Agent 增长报告
 
@@ -97,35 +211,41 @@ def build_growth_report(
 
 ---
 
-## 三、销售数据分析结果
+## 三、RAG 检索信息汇总
+
+{rag_summary_section}
+
+---
+
+## 四、销售数据分析结果
 
 {sales_analysis}
 
 ---
 
-## 四、用户评论洞察结果
+## 五、用户评论洞察结果
 
 {user_insight}
 
 ---
 
-## 五、内容策略生成结果
+## 六、内容策略生成结果
 
 {content_strategy}
 
 ---
 
-## 六、合规审核结果
+## 七、合规审核结果
 
 {compliance_review}
 
 ---
 
-## 七、报告说明
+## 八、报告说明
 
 本报告由 GrowthPilot-Agent 自动生成。
 
-系统通过 Supervisor Agent 调度多个专业 Agent，完成从经营数据分析、用户洞察、内容生成到合规审核的完整流程。
+系统通过 Supervisor Agent 调度多个专业 Agent，完成从经营数据分析、用户洞察、RAG 检索增强内容生成到合规审核的完整流程。
 """
 
     return report

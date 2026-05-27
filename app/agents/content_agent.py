@@ -3,6 +3,7 @@ import pandas as pd
 from app.knowledge_service import load_content_strategy_knowledge
 from app.llm import call_qwen
 from app.prompt_loader import render_prompt
+from app.rag_service import retrieve_knowledge
 
 
 def build_content_strategy_prompt(
@@ -21,7 +22,6 @@ def build_content_strategy_prompt(
     """
     product_text = product_info.to_string()
     comment_text = product_comments.to_string()
-    knowledge_text = load_content_strategy_knowledge()
 
     prompt = render_prompt(
         "content_strategy_prompt.txt",
@@ -29,11 +29,29 @@ def build_content_strategy_prompt(
         comment_text=comment_text,
     )
 
+    rag_query = (
+        "请根据当前商品运营数据和用户评论，检索适合内容策略生成的"
+        "内容平台规则、小红书内容风格、抖音脚本结构和合规表达建议。\n\n"
+        f"商品运营数据：\n{product_text}\n\n"
+        f"用户评论数据：\n{comment_text}"
+    )
+
+    try:
+        knowledge_text = retrieve_knowledge(
+            query=rag_query,
+            top_k=3,
+        )
+    except Exception:
+        knowledge_text = load_content_strategy_knowledge()
+
+    if not knowledge_text:
+        knowledge_text = load_content_strategy_knowledge()
+
     if knowledge_text:
         prompt = (
             f"{prompt}\n\n"
-            "以下是内容平台规则和内容风格知识，请在生成内容策略时参考，"
-            "但不要逐字照抄：\n"
+            "以下是从 ChromaDB 向量知识库检索到的内容平台规则和内容风格知识，"
+            "请在生成内容策略时参考，但不要逐字照抄：\n"
             f"{knowledge_text}"
         )
 

@@ -28,6 +28,33 @@
     "load_compliance_knowledge",
     "load_all_knowledge"
   ],
+  "required_rag_service_functions": [
+    "read_markdown_file",
+    "load_knowledge_documents",
+    "split_text_into_chunks",
+    "build_hash_embedding",
+    "get_chroma_client",
+    "reset_knowledge_collection",
+    "get_knowledge_collection",
+    "build_knowledge_chunks",
+    "index_knowledge_base",
+    "ensure_knowledge_index",
+    "retrieve_knowledge"
+  ],
+  "rag_eval_queries": [
+    {
+      "id": "rag_content_strategy_001",
+      "query": "小红书内容生成需要注意哪些内容风格和合规表达？",
+      "min_length": 100,
+      "expected_keywords": ["来源：", "小红书"]
+    },
+    {
+      "id": "rag_compliance_001",
+      "query": "绝对化表达、功效承诺和医疗化表达有什么合规风险？",
+      "min_length": 100,
+      "expected_keywords": ["来源：", "风险"]
+    }
+  ],
   "required_env_example_keys": [
     "DASHSCOPE_API_KEY",
     "DASHSCOPE_BASE_URL",

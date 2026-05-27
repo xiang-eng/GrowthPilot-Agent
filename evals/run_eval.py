@@ -132,6 +132,7 @@ def run_file_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]:
         BASE_DIR / "app" / "prompt_loader.py",
         BASE_DIR / "app" / "report_service.py",
         BASE_DIR / "app" / "knowledge_service.py",
+        BASE_DIR / "app" / "rag_service.py",
     ]
 
     example_upload_files = eval_cases.get("example_upload_files", [])
@@ -363,6 +364,138 @@ def run_knowledge_base_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]
             compliance_knowledge_detail,
         )
         results.append(compliance_knowledge_passed)
+
+    return results
+
+
+def run_rag_service_evals(eval_cases: Dict[str, Any]) -> List[Optional[bool]]:
+    """
+    检查 ChromaDB RAG 服务是否可用。
+    """
+    results: List[Optional[bool]] = []
+
+    required_functions = eval_cases.get("required_rag_service_functions", [])
+    rag_eval_queries = eval_cases.get("rag_eval_queries", [])
+
+    try:
+        rag_service = importlib.import_module("app.rag_service")
+        module_imported = True
+        module_detail = "app.rag_service 导入成功"
+    except Exception as error:
+        rag_service = None
+        module_imported = False
+        module_detail = str(error)
+
+    print_eval_result(
+        "rag_service 模块导入检查",
+        module_imported,
+        module_detail,
+    )
+    results.append(module_imported)
+
+    if not module_imported:
+        return results
+
+    for function_name in required_functions:
+        has_function = hasattr(rag_service, function_name)
+
+        print_eval_result(
+            f"rag_service 函数检查: {function_name}",
+            has_function,
+            "函数存在" if has_function else "函数缺失",
+        )
+        results.append(has_function)
+
+    if hasattr(rag_service, "build_knowledge_chunks"):
+        try:
+            chunks = rag_service.build_knowledge_chunks()
+            chunks_passed = isinstance(chunks, list) and len(chunks) > 0
+
+            if chunks_passed:
+                first_chunk = chunks[0]
+                chunk_keys_passed = all(
+                    key in first_chunk
+                    for key in ["id", "source", "content"]
+                )
+                chunks_detail = (
+                    f"知识片段数量: {len(chunks)}, "
+                    f"首个来源: {first_chunk.get('source')}"
+                )
+            else:
+                chunk_keys_passed = False
+                chunks_detail = "知识片段为空"
+
+        except Exception as error:
+            chunks_passed = False
+            chunk_keys_passed = False
+            chunks_detail = str(error)
+
+        print_eval_result(
+            "RAG 知识片段构建检查",
+            chunks_passed,
+            chunks_detail,
+        )
+        results.append(chunks_passed)
+
+        print_eval_result(
+            "RAG 知识片段字段检查",
+            chunk_keys_passed,
+            "字段完整" if chunk_keys_passed else "缺少 id/source/content 字段",
+        )
+        results.append(chunk_keys_passed)
+
+    if hasattr(rag_service, "index_knowledge_base"):
+        try:
+            indexed_count = rag_service.index_knowledge_base(reset=True)
+            index_passed = isinstance(indexed_count, int) and indexed_count > 0
+            index_detail = f"写入 ChromaDB 片段数: {indexed_count}"
+        except Exception as error:
+            index_passed = False
+            index_detail = str(error)
+
+        print_eval_result(
+            "ChromaDB 知识库索引构建检查",
+            index_passed,
+            index_detail,
+        )
+        results.append(index_passed)
+
+    if hasattr(rag_service, "retrieve_knowledge"):
+        for query_case in rag_eval_queries:
+            case_id = query_case["id"]
+            query = query_case["query"]
+            min_length = query_case.get("min_length", 1)
+            expected_keywords = query_case.get("expected_keywords", [])
+
+            try:
+                retrieved_text = rag_service.retrieve_knowledge(
+                    query=query,
+                    top_k=3,
+                )
+
+                length_passed = len(retrieved_text) >= min_length
+                matched_keywords = [
+                    keyword for keyword in expected_keywords
+                    if keyword in retrieved_text
+                ]
+                keywords_passed = len(matched_keywords) == len(expected_keywords)
+
+                passed = length_passed and keywords_passed
+                detail = (
+                    f"检索长度: {len(retrieved_text)}, "
+                    f"命中关键词: {matched_keywords}"
+                )
+
+            except Exception as error:
+                passed = False
+                detail = str(error)
+
+            print_eval_result(
+                f"ChromaDB RAG 检索评测: {case_id}",
+                passed,
+                detail,
+            )
+            results.append(passed)
 
     return results
 
@@ -1022,43 +1155,48 @@ def main() -> None:
     results.extend(run_knowledge_base_evals(eval_cases))
 
     print("\n==============================")
-    print("4. 默认数据读取与指标评测")
+    print("4. ChromaDB RAG 检索评测")
+    print("==============================")
+    results.extend(run_rag_service_evals(eval_cases))
+
+    print("\n==============================")
+    print("5. 默认数据读取与指标评测")
     print("==============================")
     results.extend(run_data_evals(eval_cases))
 
     print("\n==============================")
-    print("5. examples 上传示例数据评测")
+    print("6. examples 上传示例数据评测")
     print("==============================")
     results.extend(run_example_upload_evals(eval_cases))
 
     print("\n==============================")
-    print("6. Prompt 模板文件评测")
+    print("7. Prompt 模板文件评测")
     print("==============================")
     results.extend(run_prompt_template_evals(eval_cases))
 
     print("\n==============================")
-    print("7. Prompt 渲染评测")
+    print("8. Prompt 渲染评测")
     print("==============================")
     results.extend(run_prompt_render_evals())
 
     print("\n==============================")
-    print("8. Supervisor 工作流静态能力评测")
+    print("9. Supervisor 工作流静态能力评测")
     print("==============================")
     results.extend(run_supervisor_static_evals(eval_cases))
 
     print("\n==============================")
-    print("9. 报告与 Trace 导出服务评测")
+    print("10. 报告与 Trace 导出服务评测")
     print("==============================")
     results.extend(run_report_service_evals(eval_cases))
 
     if args.with_llm:
         print("\n==============================")
-        print("10. 合规审核 LLM 评测")
+        print("11. 合规审核 LLM 评测")
         print("==============================")
         results.extend(run_compliance_llm_evals(eval_cases))
     else:
         print("\n==============================")
-        print("10. 合规审核 LLM 评测")
+        print("11. 合规审核 LLM 评测")
         print("==============================")
         print("已跳过。需要运行时请使用：python evals/run_eval.py --with-llm")
 

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
 
 import pandas as pd
 import streamlit as st
@@ -86,6 +87,97 @@ def render_template_download_buttons() -> None:
             mime="text/csv",
             key="download_comments_template",
         )
+
+
+def render_rag_context(rag_context: Dict[str, Any], key_prefix: str) -> None:
+    """
+    渲染单条 Trace 中的 RAG 检索信息。
+    """
+    if not rag_context:
+        st.info("该步骤没有 RAG 检索信息。")
+        return
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+
+    metric_col1.metric(
+        "used_chromadb",
+        str(rag_context.get("used_chromadb", False)),
+    )
+    metric_col2.metric(
+        "fallback_used",
+        str(rag_context.get("fallback_used", False)),
+    )
+    metric_col3.metric(
+        "top_k",
+        str(rag_context.get("top_k", 0)),
+    )
+    metric_col4.metric(
+        "chunk_count",
+        str(rag_context.get("chunk_count", 0)),
+    )
+
+    st.markdown(f"**Agent：** {rag_context.get('agent', '')}")
+
+    sources = rag_context.get("sources", [])
+    if sources:
+        st.markdown("**命中的知识库来源：**")
+        st.write(sources)
+    else:
+        st.markdown("**命中的知识库来源：** 无")
+
+    query = rag_context.get("query", "")
+    if query:
+        st.markdown("**RAG Query：**")
+        st.text_area(
+            label="RAG Query",
+            value=query,
+            height=120,
+            disabled=True,
+            key=f"{key_prefix}_rag_query",
+            label_visibility="collapsed",
+        )
+
+    retrieved_text_preview = rag_context.get("retrieved_text_preview", "")
+    if retrieved_text_preview:
+        st.markdown("**检索片段预览：**")
+        st.text_area(
+            label="检索片段预览",
+            value=retrieved_text_preview,
+            height=160,
+            disabled=True,
+            key=f"{key_prefix}_rag_preview",
+            label_visibility="collapsed",
+        )
+
+    error = rag_context.get("error", "")
+    if error:
+        st.error(error)
+
+
+def render_rag_trace_summary(traces: List[Dict[str, Any]]) -> None:
+    """
+    在 Trace 页面集中展示所有 RAG 检索信息。
+    """
+    rag_traces = [
+        trace for trace in traces
+        if trace.get("rag_context")
+    ]
+
+    st.markdown("### RAG 检索信息")
+
+    if not rag_traces:
+        st.info("暂无 RAG 检索信息。")
+        return
+
+    for index, trace in enumerate(rag_traces):
+        rag_context = trace.get("rag_context", {})
+        step = trace.get("step", "")
+
+        with st.expander(f"{step}｜RAG 检索详情", expanded=False):
+            render_rag_context(
+                rag_context=rag_context,
+                key_prefix=f"summary_{index}",
+            )
 
 
 def load_page_data():
@@ -196,18 +288,11 @@ def main() -> None:
         12. CSV 模板下载  
         13. 工作流 run_id 追踪  
         14. Supervisor 工作流进度展示  
+        15. RAG query、sources、chunk_count 和检索片段预览展示  
         """
     )
 
-    # =========================
-    # 1. 读取业务数据
-    # =========================
-
     products, sales, comments, df = load_page_data()
-
-    # =========================
-    # 2. 核心指标展示
-    # =========================
 
     total_gmv = df["gmv"].sum()
     avg_ctr = df["ctr"].mean()
@@ -220,10 +305,6 @@ def main() -> None:
     col2.metric("平均 CTR", f"{avg_ctr:.2%}")
     col3.metric("平均 CVR", f"{avg_cvr:.2%}")
     col4.metric("平均退款率", f"{avg_refund:.2%}")
-
-    # =========================
-    # 3. 数据展示
-    # =========================
 
     st.divider()
 
@@ -241,10 +322,6 @@ def main() -> None:
         st.subheader("原始销售数据")
         st.dataframe(sales, use_container_width=True)
 
-    # =========================
-    # 4. 销售数据分析 Agent
-    # =========================
-
     st.divider()
 
     st.subheader("🤖 销售数据分析 Agent")
@@ -255,10 +332,6 @@ def main() -> None:
 
         st.markdown(result)
 
-    # =========================
-    # 5. 用户评论洞察 Agent
-    # =========================
-
     st.divider()
 
     st.subheader("🧠 用户评论洞察 Agent")
@@ -268,10 +341,6 @@ def main() -> None:
             result = run_user_insight_agent(comments)
 
         st.markdown(result)
-
-    # =========================
-    # 6. 多商品批量增长分析 Agent
-    # =========================
 
     st.divider()
 
@@ -309,10 +378,6 @@ def main() -> None:
         st.markdown("### 多商品批量增长策略")
         st.markdown(st.session_state.batch_growth_result)
 
-    # =========================
-    # 7. 内容策略 Agent
-    # =========================
-
     st.divider()
 
     st.subheader("✍️ 内容策略 Agent")
@@ -336,10 +401,6 @@ def main() -> None:
     if st.session_state.generated_content:
         st.markdown("### 已生成内容")
         st.markdown(st.session_state.generated_content)
-
-    # =========================
-    # 8. Supervisor Agent
-    # =========================
 
     st.divider()
 
@@ -462,6 +523,7 @@ def main() -> None:
         result_tabs = st.tabs(
             [
                 "Trace 执行日志",
+                "RAG 检索信息",
                 "销售分析结果",
                 "评论洞察结果",
                 "内容策略结果",
@@ -488,7 +550,7 @@ def main() -> None:
 
                 st.markdown("### 分步骤日志")
 
-                for trace in traces:
+                for index, trace in enumerate(traces):
                     with st.expander(
                         f"{trace['step']}｜{trace['status']}｜{trace['duration_seconds']} 秒"
                     ):
@@ -502,26 +564,32 @@ def main() -> None:
                             st.markdown("**输出预览：**")
                             st.markdown(trace["output_preview"])
 
+                        if trace.get("rag_context"):
+                            st.markdown("**RAG 检索元信息：**")
+                            render_rag_context(
+                                rag_context=trace["rag_context"],
+                                key_prefix=f"trace_{index}",
+                            )
+
                         if trace["error"]:
                             st.error(trace["error"])
             else:
                 st.info("暂无 Trace 日志。")
 
         with result_tabs[1]:
-            st.markdown(st.session_state.supervisor_result["sales_analysis"])
+            render_rag_trace_summary(traces)
 
         with result_tabs[2]:
-            st.markdown(st.session_state.supervisor_result["user_insight"])
+            st.markdown(st.session_state.supervisor_result["sales_analysis"])
 
         with result_tabs[3]:
-            st.markdown(st.session_state.supervisor_result["content_strategy"])
+            st.markdown(st.session_state.supervisor_result["user_insight"])
 
         with result_tabs[4]:
-            st.markdown(st.session_state.supervisor_result["compliance_review"])
+            st.markdown(st.session_state.supervisor_result["content_strategy"])
 
-    # =========================
-    # 9. 合规审核 Agent
-    # =========================
+        with result_tabs[5]:
+            st.markdown(st.session_state.supervisor_result["compliance_review"])
 
     st.divider()
 
